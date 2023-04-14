@@ -102,7 +102,17 @@ if (app.Environment.IsDevelopment()) {
   app.UseSwaggerUI();
 }
 
+
+
 app.UseHttpsRedirection();
+
+app.UsePathBase(new PathString("/api/v1"));
+
+app.UseCors(reqOrigin);
+
+app.UseRouting();
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 

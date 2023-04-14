@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace ChattyBox.Context;
 
-public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, UserClaim, IdentityUserRole<string>, UserLogin, RoleClaim, UserToken> {
+public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, UserClaim, UserRole, UserLogin, RoleClaim, UserToken> {
   public ChattyBoxContext() {
   }
 
@@ -34,6 +34,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public override DbSet<UserClaim> UserClaims { get; set; } = null!;
 
   public override DbSet<UserLogin> UserLogins { get; set; } = null!;
+
+  public override DbSet<UserRole> UserRoles { get; set; } = null!;
 
   public override DbSet<UserToken> UserTokens { get; set; } = null!;
 
@@ -98,8 +100,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
     modelBuilder.Entity<User>(entity => {
       entity.HasMany(d => d.Roles).WithMany(p => p.Users)
-        .UsingEntity<Dictionary<string, object>>(
-          "UserRole",
+        .UsingEntity<UserRole>(
           r => r.HasOne<Role>().WithMany()
             .HasForeignKey("RoleId")
             .HasConstraintName("FK_UserRoles_Roles_RoleId"),
@@ -109,8 +110,6 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
           j => {
             j.HasKey("UserId", "RoleId").HasName("PK_UserRoles");
             j.ToTable("UserRole");
-            j.IndexerProperty<string>("UserId").HasColumnName("userId");
-            j.IndexerProperty<string>("RoleId").HasColumnName("roleId");
           });
     });
 

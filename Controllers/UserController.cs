@@ -51,7 +51,8 @@ public class UserController : ControllerBase {
       await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
       await _userManager.UpdateSecurityStampAsync(user);
       return Ok(user.Email);
-    } catch {
+    } catch(Exception e) {
+      Console.Error.WriteLine(e);
       return Unauthorized();
     }
   }
@@ -68,9 +69,13 @@ public class UserController : ControllerBase {
 
   [HttpGet("Current")]
   async public Task<IActionResult> GetCurrentUser() {
+    Console.WriteLine($"Is signed in: {_signInManager.IsSignedIn(HttpContext.User)}");
     if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
     var user = await _userManager.GetUserAsync(HttpContext.User);
     if (user == null) return Unauthorized();
-    return Ok(user.Email);
+    return Ok(new {
+      email = user.Email,
+      userName = user.UserName,
+    });
   }
 }
