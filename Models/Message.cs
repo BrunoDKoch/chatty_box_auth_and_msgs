@@ -27,9 +27,6 @@ public partial class Message {
   [StringLength(1000)]
   public string ChatId { get; set; } = null!;
 
-  [Column("read")]
-  public bool Read { get; set; }
-
   [Column("text")]
   [StringLength(1000)]
   public string Text { get; set; } = null!;
@@ -52,4 +49,8 @@ public partial class Message {
   [ForeignKey("ReplyToId")]
   [InverseProperty("InverseReplyTo")]
   public virtual Message ReplyTo { get; set; } = null!;
+
+  [ForeignKey("UserId")]
+  [InverseProperty("ReadMessages")]
+  public virtual ICollection<User> ReadBy { get; set; } = new List<User>();
 }

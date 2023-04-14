@@ -13,6 +13,9 @@ namespace ChattyBox.Models;
 [Index("Email", Name = "Users_email_key", IsUnique = true)]
 [Index("NormalizedEmail", Name = "Users_normalizedEmail_key", IsUnique = true)]
 public partial class User : IdentityUser {
+  [InverseProperty("User")]
+  [Column("clientConnection")]
+  public virtual ClientConnection Connection { get; set; } = null!;
 
   [InverseProperty("From")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
@@ -29,4 +32,16 @@ public partial class User : IdentityUser {
   [ForeignKey("UserId")]
   [InverseProperty("Users")]
   public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
+
+  [ForeignKey("B")]
+  [InverseProperty("Users")]
+  public virtual ICollection<Chat> Chats { get; set; } = new List<Chat>();
+
+  [ForeignKey("UserId")]
+  [InverseProperty("Admins")]
+  public virtual ICollection<Chat> IsAdminIn { get; set; } = new List<Chat>();
+
+  [ForeignKey("MessageId")]
+  [InverseProperty("ReadBy")]
+  public virtual ICollection<Message> ReadMessages { get; set; } = new List<Message>();
 }

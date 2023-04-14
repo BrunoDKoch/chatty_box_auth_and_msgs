@@ -17,6 +17,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<Blocked> Blocks { get; set; } = null!;
 
+  public virtual DbSet<ClientConnection> ClientConnections { get; set; } = null!;
+
   public virtual DbSet<Chat> Chats { get; set; } = null!;
 
   public virtual DbSet<ChatToUser> ChatToUsers { get; set; } = null!;
@@ -24,6 +26,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public virtual DbSet<Friend> Friends { get; set; } = null!;
 
   public virtual DbSet<Message> Messages { get; set; } = null!;
+
+  public virtual DbSet<ReadMessage> ReadMessages { get; set; }
 
   public override DbSet<Role> Roles { get; set; } = null!;
 
@@ -53,17 +57,29 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
         .HasConstraintName("_blocked_B_fkey");
     });
 
+    modelBuilder.Entity<ClientConnection>(entity => {
+      entity.HasKey(e => e.UserId).HasName("ClientConnection_pkey");
+
+      entity.HasOne(e => e.User).WithOne(u => u.Connection);
+    });
+
     modelBuilder.Entity<Chat>(entity => {
       entity.HasKey(e => e.Id).HasName("Chat_pkey");
 
       entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
       entity.Property(e => e.MaxUsers).HasDefaultValueSql("((2))");
-    });
-
-    modelBuilder.Entity<ChatToUser>(entity => {
-      entity.HasOne(d => d.ANavigation).WithMany().HasConstraintName("_ChatToUser_A_fkey");
-
-      entity.HasOne(d => d.BNavigation).WithMany().HasConstraintName("_ChatToUser_B_fkey");
+      entity.HasMany<User>(e => e.Users).WithMany(u => u.Chats)
+        .UsingEntity<ChatToUser>(
+          r => r.HasOne<User>().WithMany()
+            .HasForeignKey("A")
+            .HasConstraintName("_ChatToUser_A_fkey"),
+          l => l.HasOne<Chat>().WithMany()
+            .HasForeignKey("B")
+            .HasConstraintName("_ChatToUser_B_fkey"),
+          j => {
+            j.HasNoKey();
+            j.ToTable("_ChatToUser");
+          });
     });
 
     modelBuilder.Entity<Friend>(entity => {
@@ -92,6 +108,13 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.HasOne(d => d.ReplyTo).WithMany(p => p.InverseReplyTo)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("Message_replyToId_fkey");
+        
+    });
+
+    modelBuilder.Entity<ReadMessage>(entity => {
+      entity.HasKey(e => new { e.MessageId, e.UserId }).HasName("ReadMessage_pkey");
+
+      entity.Property(e => e.ReadAt).HasDefaultValueSql("(getdate())");
     });
 
     modelBuilder.Entity<RoleClaim>(entity => {
@@ -110,6 +133,21 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
           j => {
             j.HasKey("UserId", "RoleId").HasName("PK_UserRoles");
             j.ToTable("UserRole");
+          });
+
+      entity.HasMany(d => d.IsAdminIn).WithMany(p => p.Admins)
+        .UsingEntity<ChatAdmin>(
+          r => r.HasOne<Chat>().WithMany()
+            .HasForeignKey("ChatId")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("ChatAdmin_chatId_fkey"),
+          l => l.HasOne<User>().WithMany()
+            .HasForeignKey("UserId")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("ChatAdmin_userId_fkey"),
+          j => {
+            j.HasKey("UserId", "ChatId").HasName("ChatAdmin_pkey");
+            j.ToTable("ChatAdmin");
           });
     });
 
