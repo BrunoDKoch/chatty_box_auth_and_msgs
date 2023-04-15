@@ -26,3 +26,10 @@ public class LogInInfo {
 public class EmailValidationRequest {
   public string Code { get; set; } = null!;
 }
+
+public class MessagePreview {
+  public User From { get; set; } = null!;
+  public DateTime SentAt { get; set; }
+  public string Text { get; set; } = null!;
+  public Chat Chat { get; set; } = null!;
+}

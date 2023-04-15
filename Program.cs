@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Context;
 using ChattyBox.Models;
+using ChattyBox.Hubs;
 
 var reqOrigin = "_reqOrigin";
 
@@ -50,6 +51,7 @@ builder.Services.AddCors(options => {
 });
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -102,8 +104,6 @@ if (app.Environment.IsDevelopment()) {
   app.UseSwaggerUI();
 }
 
-
-
 app.UseHttpsRedirection();
 
 app.UsePathBase(new PathString("/api/v1"));
@@ -116,6 +116,9 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
-app.MapControllers();
+app.UseEndpoints(endpoints => {
+  endpoints.MapControllers();
+  endpoints.MapHub<MessagesHub>("/hub/messages");
+});
 
 app.Run();

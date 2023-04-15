@@ -19,6 +19,9 @@ public partial class Chat {
   [Column("maxUsers")]
   public int MaxUsers { get; set; }
 
+  [Column("chatName")]
+  public string? ChatName { get; set; }
+
   [Column("createdAt")]
   public DateTime CreatedAt { get; set; }
 

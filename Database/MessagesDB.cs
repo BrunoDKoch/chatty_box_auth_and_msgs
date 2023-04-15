@@ -50,10 +50,11 @@ public class MessagesDB {
     var latestMessages = chats.Select(c => c.Messages.OrderBy(m => m.SentAt).First()).ToList();
 
     // TODO: Implement this filter
-    var filteredMessages = from message in latestMessages select new {
-      user = message.From.UserName,
-      sentAt = message.SentAt,
-      text = message.Text,
+    var filteredMessages = from message in latestMessages select new MessagePreview {
+      From = message.From,
+      SentAt = message.SentAt,
+      Text = message.Text,
+      Chat = message.Chat,
     };
     return latestMessages;
   }

@@ -11,13 +11,15 @@ public class MessagesHub : Hub {
   private MessagesDB _messagesDB = new MessagesDB();
 
   async public override Task OnConnectedAsync() {
-    var connection = await _messagesDB.CreateConnection(this.Context.UserIdentifier, this.Context.ConnectionId);
+    var id = this.Context.UserIdentifier;
+    if (id == null) return;
+    var connection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
     await base.OnConnectedAsync();
   }
 
   async public Task GetChatMessages(string userId, string chatId) {
     var messages = await _messagesDB.GetMessagesFromChat(userId, chatId);
-    await Clients.Client(this.Context.ConnectionId).SendAsync("directMessages", messages, default);
+    await Clients.Client(this.Context.ConnectionId).SendAsync("chatMessages", messages, default);
   }
 
   async public Task GetUnreadCount(string userId) {
@@ -57,11 +59,15 @@ public class MessagesHub : Hub {
   }
 
   async public Task MarkAsRead(string id) {
-    await _messagesDB.MarkAsRead(id, this.Context.UserIdentifier);
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    await _messagesDB.MarkAsRead(id, userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("read", id, default);
   }
 
-  async public Task GetMessagePreviews(string userId) {
+  async public Task GetMessagePreviews() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
     var messages = await _messagesDB.GetLatestMessagesAsync(userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
   }
