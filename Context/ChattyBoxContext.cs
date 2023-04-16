@@ -27,7 +27,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<Message> Messages { get; set; } = null!;
 
-  public virtual DbSet<ReadMessage> ReadMessages { get; set; }
+  public virtual DbSet<ReadMessage> ReadMessages { get; set; } = null!;
 
   public override DbSet<Role> Roles { get; set; } = null!;
 
