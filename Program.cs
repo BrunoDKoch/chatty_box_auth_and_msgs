@@ -7,36 +7,15 @@ using Microsoft.EntityFrameworkCore;
 using ChattyBox.Context;
 using ChattyBox.Models;
 using ChattyBox.Hubs;
+using ChattyBox.Misc;
 
 var reqOrigin = "_reqOrigin";
 
-string[] vowels = { "a", "e", "i", "o", "u" };
-char[] accents = { '\u0300', '\u0301', '\u0302', '\u0303', '\u0308' };
+var allowedLetters = ValidCharacters.GetLetters();
 
-var englishAlphabet = new List<string>();
-for (char a = 'A'; a <= 'Z'; a++) {
-  var charString = a.ToString();
-  englishAlphabet.Add(charString);
+foreach (var character in allowedLetters) {
+  Console.WriteLine(character);
 }
-
-for (char a = 'a'; a <= 'z'; a++) {
-  var charString = a.ToString();
-  englishAlphabet.Add(charString);
-}
-
-var accentedLetters = new List<string>();
-
-foreach (var vowel in vowels) {
-  foreach (var accent in accents) {
-    accentedLetters.Add((vowel + accent).Normalize());
-    accentedLetters.Add((vowel.ToUpper() + accent).Normalize());
-  }
-}
-
-var allowedLetters = (englishAlphabet.Concat(accentedLetters)).ToList();
-allowedLetters.Add("Ç");
-allowedLetters.Add("ç");
-allowedLetters.Add(" ");
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,7 +42,7 @@ builder.Services.AddDbContext<ChattyBoxContext>(options => {
 
 builder.Services.AddIdentity<User, Role>(options => {
   options.User.RequireUniqueEmail = true;
-  options.User.AllowedUserNameCharacters = String.Join("", allowedLetters);
+  options.User.AllowedUserNameCharacters = allowedLetters;
   options.SignIn.RequireConfirmedEmail = false;
   options.Password.RequiredLength = 8;
   options.Lockout.MaxFailedAccessAttempts = 4;

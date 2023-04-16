@@ -25,4 +25,11 @@ public class UserDB {
     }
     return friends;
   }
+
+  async public Task<List<User>> GetUsers(string userId, string userName) {
+    using var ctx = new ChattyBoxContext();
+    // Ensuring the user doesn't somehow add themselves by adding an ID filter
+    var users = await ctx.Users.Where(u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) && u.Id != userId).ToListAsync();
+    return users;
+  }
 }

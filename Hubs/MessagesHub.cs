@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using ChattyBox.Database;
+using ChattyBox.Misc;
 
 namespace ChattyBox.Hubs;
 
 public class MessagesHub : Hub {
+  private List<string> _validLetters = ValidCharacters.GetLetters().Split().ToList();
   private MessagesDB _messagesDB = new MessagesDB();
   private UserDB _userDB = new UserDB();
 
@@ -78,10 +80,20 @@ public class MessagesHub : Hub {
     await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
   }
 
+  // Friends logic
   async public Task GetFriends() {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var friends = await _userDB.GetAnUsersFriends(userId);
     await Clients.Caller.SendAsync("friends", friends, default);
+  }
+
+  async public Task SearchUser(string userName) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    foreach (var letter in userName) {
+      if (!_validLetters.Contains(letter.ToString())) return;
+    }
+    var results = await _userDB.GetUsers(userId, userName);
   }
 }
