@@ -14,6 +14,12 @@ public class MessagesDB {
   // Create
   async public Task<ClientConnection> CreateConnection(string userId, string connectionId) {
     using var ctx = new ChattyBoxContext();
+    var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+    if (existingConnection != null) {
+      existingConnection.ConnectionId = connectionId;
+      await ctx.SaveChangesAsync();
+      return existingConnection;
+    }
     var clientConnection = new ClientConnection {
       UserId = userId,
       ConnectionId = connectionId
@@ -108,5 +114,11 @@ public class MessagesDB {
     if (userId == message.FromId) await HandleMessageDeletion(ctx, message);
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     
+  }
+
+  async public Task DeleteConnection(string connectionId) {
+    using var ctx = new ChattyBoxContext();
+    var connection = await ctx.ClientConnections.FirstAsync(c => c.ConnectionId == connectionId);
+    ctx.Remove(connection);
   }
 }

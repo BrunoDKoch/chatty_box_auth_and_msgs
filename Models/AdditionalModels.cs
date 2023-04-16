@@ -33,3 +33,8 @@ public class MessagePreview {
   public string Text { get; set; } = null!;
   public Chat Chat { get; set; } = null!;
 }
+
+public class FriendsResponse {
+  public string UserName { get; set; } = null!;
+  public bool IsOnline { get; set; }
+}

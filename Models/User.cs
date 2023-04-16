@@ -44,4 +44,22 @@ public partial class User : IdentityUser {
   [ForeignKey("MessageId")]
   [InverseProperty("ReadBy")]
   public virtual ICollection<Message> ReadMessages { get; set; } = new List<Message>();
+
+  [InverseProperty("IsFriendsWith")]
+  public virtual ICollection<User> Friends { get; set; } = new List<User>();
+
+  [InverseProperty("Friends")]
+  public virtual ICollection<User> IsFriendsWith { get; set; } = new List<User>();
+
+  [InverseProperty("BlockedBy")]
+  public virtual ICollection<User> Blocking { get; set; } = new List<User>();
+
+  [InverseProperty("Blocking")]
+  public virtual ICollection<User> BlockedBy { get; set; } = new List<User>();
+
+  [InverseProperty("UserAdding")]
+  public virtual ICollection<FriendRequest> FriendRequestsSent { get; set; } = new List<FriendRequest>();
+
+  [InverseProperty("UserBeingAdded")]
+  public virtual ICollection<FriendRequest> FriendRequestsReceived { get; set; } = new List<FriendRequest>();
 }

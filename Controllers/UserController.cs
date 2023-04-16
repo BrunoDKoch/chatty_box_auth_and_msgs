@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using ChattyBox.Models;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ChattyBox.Controllers;
 
@@ -25,6 +26,7 @@ public class UserController : ControllerBase {
     _signInManager = signInManager;
   }
 
+  // Auth
   [HttpPost("Register")]
   async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
@@ -69,7 +71,6 @@ public class UserController : ControllerBase {
 
   [HttpGet("Current")]
   async public Task<IActionResult> GetCurrentUser() {
-    Console.WriteLine($"Is signed in: {_signInManager.IsSignedIn(HttpContext.User)}");
     if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
     var user = await _userManager.GetUserAsync(HttpContext.User);
     if (user == null) return Unauthorized();
@@ -77,5 +78,40 @@ public class UserController : ControllerBase {
       email = user.Email,
       userName = user.UserName,
     });
+  }
+
+  [Authorize]
+  [HttpPost("Validate/2fa")]
+  async public Task<IActionResult> ValidadeTwoFactorCode([FromBody] string code) {
+    var userClaim = HttpContext.User;
+    var user = await _userManager.GetUserAsync(userClaim);
+    if (user == null) return BadRequest("Usuário não logado");
+    var valid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, code);
+    if (!valid) return Unauthorized("Código inválido");
+    return Ok();
+  }
+
+  [HttpPost("Validate/Email")]
+  async public Task<IActionResult> ValidateEmail([FromBody] EmailValidationRequest request) {
+    var userClaim = HttpContext.User;
+    var user = await _userManager.GetUserAsync(userClaim);
+    if (user == null) return BadRequest("User not found");
+    Console.WriteLine(user.Email);
+    var claims = await _userManager.GetClaimsAsync(user);
+    var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
+    var valid = otpClaim != null && otpClaim.Value == request.Code;
+    if (!valid) return Unauthorized("Invalid code");
+    user.EmailConfirmed = true;
+    await _userManager.RemoveClaimAsync(user, user.UserClaims.First(u => u.ClaimType == "OTP").ToClaim());
+    return Ok();
+  }
+
+  // Misc
+  [HttpGet("Friends")]
+  async public Task<IActionResult> GetFriends() {
+    if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
+    var user = await _userManager.GetUserAsync(HttpContext.User);
+    if (user == null) return Unauthorized();
+    return Ok(user.Friends);
   }
 }

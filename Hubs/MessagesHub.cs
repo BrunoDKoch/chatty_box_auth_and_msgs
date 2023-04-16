@@ -6,15 +6,21 @@ using ChattyBox.Database;
 namespace ChattyBox.Hubs;
 
 public class MessagesHub : Hub {
-  private ConcurrentDictionary<string, string> _usersAndConnections = new ConcurrentDictionary<string, string>();
-
   private MessagesDB _messagesDB = new MessagesDB();
+  private UserDB _userDB = new UserDB();
 
   async public override Task OnConnectedAsync() {
     var id = this.Context.UserIdentifier;
     if (id == null) return;
     var connection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
     await base.OnConnectedAsync();
+  }
+
+  async public override Task OnDisconnectedAsync(Exception? exception) {
+    if (exception != null) {
+      Console.Error.WriteLine(exception);
+    }
+    await _messagesDB.DeleteConnection(this.Context.ConnectionId);
   }
 
   async public Task GetChatMessages(string userId, string chatId) {
@@ -70,5 +76,12 @@ public class MessagesHub : Hub {
     if (userId == null) return;
     var messages = await _messagesDB.GetLatestMessagesAsync(userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
+  }
+
+  async public Task GetFriends() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var friends = await _userDB.GetAnUsersFriends(userId);
+    await Clients.Caller.SendAsync("friends", friends, default);
   }
 }

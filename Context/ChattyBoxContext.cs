@@ -23,7 +23,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<ChatToUser> ChatToUsers { get; set; } = null!;
 
-  public virtual DbSet<Friend> Friends { get; set; } = null!;
+  public virtual DbSet<FriendRequest> FriendRequests { get; set; } = null!;
 
   public virtual DbSet<Message> Messages { get; set; } = null!;
 
@@ -43,19 +43,18 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public override DbSet<UserToken> UserTokens { get; set; } = null!;
 
-  protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-      => optionsBuilder.UseSqlServer("Name=Default");
+  protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
+    if (!optionsBuilder.IsConfigured) {
+      var configuration = new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.Development.json")
+        .Build();
+      var connString = configuration.GetConnectionString("Default");
+      optionsBuilder.UseSqlServer(connString);
+    }
+  }
 
   protected override void OnModelCreating(ModelBuilder modelBuilder) {
-    modelBuilder.Entity<Blocked>(entity => {
-      entity.HasOne(d => d.ANavigation).WithMany()
-        .OnDelete(DeleteBehavior.ClientSetNull)
-        .HasConstraintName("_blocked_A_fkey");
-
-      entity.HasOne(d => d.BNavigation).WithMany()
-        .OnDelete(DeleteBehavior.ClientSetNull)
-        .HasConstraintName("_blocked_B_fkey");
-    });
 
     modelBuilder.Entity<ClientConnection>(entity => {
       entity.HasKey(e => e.UserId).HasName("ClientConnection_pkey");
@@ -82,14 +81,18 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
           });
     });
 
-    modelBuilder.Entity<Friend>(entity => {
-      entity.HasOne(d => d.ANavigation).WithMany()
-        .OnDelete(DeleteBehavior.ClientSetNull)
-        .HasConstraintName("_friends_A_fkey");
+    modelBuilder.Entity<FriendRequest>(entity => {
+      entity.HasKey(e => new { e.UserAddingId, e.UserBeingAddedId }).HasName("FriendRequest_pkey");
 
-      entity.HasOne(d => d.BNavigation).WithMany()
-        .OnDelete(DeleteBehavior.ClientSetNull)
-        .HasConstraintName("_friends_B_fkey");
+      entity.Property(e => e.SentAt).HasDefaultValueSql("(getdate())");
+
+      entity.HasOne(d => d.UserAdding).WithMany(p => p.FriendRequestsSent)
+          .OnDelete(DeleteBehavior.ClientSetNull)
+          .HasConstraintName("FriendRequest_userAddingId_fkey");
+
+      entity.HasOne(d => d.UserBeingAdded).WithMany(p => p.FriendRequestsReceived)
+          .OnDelete(DeleteBehavior.ClientSetNull)
+          .HasConstraintName("FriendRequest_userBeingAddedId_fkey");
     });
 
     modelBuilder.Entity<Message>(entity => {
@@ -108,7 +111,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.HasOne(d => d.ReplyTo).WithMany(p => p.InverseReplyTo)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("Message_replyToId_fkey");
-        
+
     });
 
     modelBuilder.Entity<ReadMessage>(entity => {
@@ -148,6 +151,36 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
           j => {
             j.HasKey("UserId", "ChatId").HasName("ChatAdmin_pkey");
             j.ToTable("ChatAdmin");
+          });
+
+      entity.HasMany(d => d.Friends).WithMany(p => p.IsFriendsWith)
+        .UsingEntity<Friend>(
+          r => r.HasOne<User>().WithMany()
+            .HasForeignKey("A")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("_friends_A_fkey"),
+          l => l.HasOne<User>().WithMany()
+            .HasForeignKey("B")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("_friends_B_fkey"),
+          j => {
+            j.HasKey("A", "B").HasName("_friends_AB_unique");
+            j.ToTable("_friends");
+          });
+
+      entity.HasMany(d => d.Blocking).WithMany(p => p.BlockedBy)
+        .UsingEntity<Blocked>(
+          r => r.HasOne<User>().WithMany()
+            .HasForeignKey("A")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("_blocked_A_fkey"),
+          l => l.HasOne<User>().WithMany()
+            .HasForeignKey("B")
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("_blocked_B_fkey"),
+          j => {
+            j.HasKey("A", "B").HasName("_blocked_AB_unique");
+            j.ToTable("_blocked");
           });
     });
 
