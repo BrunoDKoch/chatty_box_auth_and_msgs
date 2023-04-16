@@ -28,7 +28,11 @@ public class UserDB {
 
   async public Task<List<User>> GetUsers(string userId, string userName) {
     using var ctx = new ChattyBoxContext();
+<<<<<<< HEAD
     // Ensuring the user doesn't somehow add themselves by adding an ID filter
+=======
+    // Ensuring the user doesn't somehow search for themselves by adding an ID filter
+>>>>>>> 7a9df00 (Add valid chars and improve userDB)
     var users = await ctx.Users.Where(u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) && u.Id != userId).ToListAsync();
     return users;
   }
