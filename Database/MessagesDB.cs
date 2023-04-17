@@ -84,6 +84,12 @@ public class MessagesDB {
     return count;
   }
 
+  async public Task<ClientConnection> GetClientConnection(string userId) {
+    using var ctx = new ChattyBoxContext();
+    var clientConnection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
+    return clientConnection;
+  }
+
   // Update
   async public Task<Message> EditMessage(string messageId, string text) {
     using var ctx = new ChattyBoxContext();

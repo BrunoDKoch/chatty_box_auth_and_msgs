@@ -23,6 +23,7 @@ public class MessagesHub : Hub {
       Console.Error.WriteLine(exception);
     }
     await _messagesDB.DeleteConnection(this.Context.ConnectionId);
+    await base.OnDisconnectedAsync(exception);
   }
 
   async public Task GetChatMessages(string userId, string chatId) {
@@ -30,7 +31,9 @@ public class MessagesHub : Hub {
     await Clients.Client(this.Context.ConnectionId).SendAsync("chatMessages", messages, default);
   }
 
-  async public Task GetUnreadCount(string userId) {
+  async public Task GetUnreadCount() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
     var count = await _messagesDB.CountUnreadMessages(userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("unread", count, default);
   }
@@ -91,9 +94,29 @@ public class MessagesHub : Hub {
   async public Task SearchUser(string userName) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    foreach (var letter in userName) {
-      if (!_validLetters.Contains(letter.ToString())) return;
-    }
     var results = await _userDB.GetUsers(userId, userName);
+    await Clients.Caller.SendAsync("searchResults", results, default);
+  }
+
+  async public Task SendFriendRequest(string addedId) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var friendRequest = _userDB.CreateFriendRequest(userId, addedId);
+    if (friendRequest == null) return;
+    await Clients.Caller.SendAsync("added", friendRequest, default);
+    var addedConnection = await _messagesDB.GetClientConnection(addedId);
+    if (addedConnection == null) return;
+    try {
+      await Clients.Client(addedConnection.ConnectionId).SendAsync("newFriendRequest", friendRequest, default);
+    } catch {
+      return;
+    }
+  }
+
+  async public Task GetFriendRequests() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var requests = await _userDB.GetFriendRequests(userId);
+    await Clients.Caller.SendAsync("pendingRequests", requests, default);
   }
 }

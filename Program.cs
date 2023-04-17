@@ -13,10 +13,6 @@ var reqOrigin = "_reqOrigin";
 
 var allowedLetters = ValidCharacters.GetLetters();
 
-foreach (var character in allowedLetters) {
-  Console.WriteLine(character);
-}
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
