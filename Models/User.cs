@@ -17,6 +17,9 @@ public partial class User : IdentityUser {
   [Column("clientConnection")]
   public virtual ClientConnection Connection { get; set; } = null!;
 
+  [Column("avatar")]
+  public string? Avatar { get; set; }
+
   [InverseProperty("From")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 
