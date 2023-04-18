@@ -155,11 +155,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
       entity.HasMany(d => d.Friends).WithMany(p => p.IsFriendsWith)
         .UsingEntity<Friend>(
-          r => r.HasOne<User>().WithMany()
+          r => r.HasOne(c => c.ANavigation).WithMany()
             .HasForeignKey("A")
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("_friends_A_fkey"),
-          l => l.HasOne<User>().WithMany()
+          l => l.HasOne(c => c.BNavigation).WithMany()
             .HasForeignKey("B")
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("_friends_B_fkey"),
@@ -170,11 +170,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
       entity.HasMany(d => d.Blocking).WithMany(p => p.BlockedBy)
         .UsingEntity<Blocked>(
-          r => r.HasOne<User>().WithMany()
+          r => r.HasOne(c => c.ANavigation).WithMany()
             .HasForeignKey("A")
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("_blocked_A_fkey"),
-          l => l.HasOne<User>().WithMany()
+          l => l.HasOne(c => c.BNavigation).WithMany()
             .HasForeignKey("B")
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("_blocked_B_fkey"),

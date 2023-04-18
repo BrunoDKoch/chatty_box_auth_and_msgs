@@ -119,4 +119,10 @@ public class MessagesHub : Hub {
     var requests = await _userDB.GetFriendRequests(userId);
     await Clients.Caller.SendAsync("pendingRequests", requests, default);
   }
+
+  async public Task RespondToFriendRequest(string addingId, bool accept) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    await _userDB.HandleFriendRequest(userId, addingId, accept);
+  }
 }

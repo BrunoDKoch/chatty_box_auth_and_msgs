@@ -26,9 +26,14 @@ public class UserDB {
   // Read
   async public Task<List<FriendsResponse>> GetAnUsersFriends(string userId) {
     using var ctx = new ChattyBoxContext();
-    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+    var user = await ctx.Users
+      .Include(u => u.Friends).ThenInclude(f => f.Connection)
+      .Include(u => u.IsFriendsWith).ThenInclude(f => f.Connection)
+      .FirstAsync(u => u.Id == userId);
     List<FriendsResponse> friends = new List<FriendsResponse>();
-    foreach (var friend in user.Friends) {
+    List<User> userFriends = new List<User>();
+    userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();
+    foreach (var friend in userFriends) {
       if (friend.Connection != null) {
         friends.Add(new FriendsResponse {
           UserName = friend.UserName!,
@@ -53,7 +58,23 @@ public class UserDB {
 
   async public Task<List<FriendRequest>> GetFriendRequests(string userId) {
     using var ctx = new ChattyBoxContext();
-    var requests = await ctx.FriendRequests.Where(f => f.UserBeingAddedId == userId).ToListAsync();
+    var requests = await ctx.FriendRequests.Where(f => f.UserBeingAddedId == userId).Include(f => f.UserAdding).ToListAsync();
     return requests;
+  }
+
+  // Update
+
+  async public Task HandleFriendRequest(string userId, string addingId, bool accepting) {
+    using var ctx = new ChattyBoxContext();
+    ctx.FriendRequests.Remove(
+      await ctx.FriendRequests.FirstAsync(f => f.UserBeingAddedId == userId && f.UserAddingId == addingId)
+    );
+    if (accepting) {
+      var adding = await ctx.Users.FirstAsync(u => u.Id == addingId);
+      var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+      adding.Friends.Add(user);
+      user.IsFriendsWith.Add(adding);
+    }
+    await ctx.SaveChangesAsync();
   }
 }
