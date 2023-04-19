@@ -37,11 +37,13 @@ public class UserDB {
       if (friend.Connection != null) {
         friends.Add(new FriendsResponse {
           UserName = friend.UserName!,
+          UserId = friend.Id,
           IsOnline = true
         });
       } else {
         friends.Add(new FriendsResponse {
           UserName = friend.UserName!,
+          UserId = friend.Id,
           IsOnline = false
         });
       }

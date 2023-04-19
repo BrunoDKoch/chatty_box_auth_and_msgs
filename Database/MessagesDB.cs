@@ -109,10 +109,14 @@ public class MessagesDB {
     return count;
   }
 
-  async public Task<ClientConnection> GetClientConnection(string userId) {
+  async public Task<ClientConnection?> GetClientConnection(string userId) {
     using var ctx = new ChattyBoxContext();
-    var clientConnection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
-    return clientConnection;
+    try {
+      var clientConnection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
+      return clientConnection;
+    } catch (InvalidOperationException) {
+      return null;
+    }
   }
 
   // Update
@@ -147,10 +151,20 @@ public class MessagesDB {
     
   }
 
-  async public Task DeleteConnection(string userId) {
+  async public Task<List<string>> DeleteConnection(string userId) {
     using var ctx = new ChattyBoxContext();
     var connection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
     ctx.Remove(connection);
     await ctx.SaveChangesAsync();
+    var userFriends = await ctx.Users
+      .Include(u => u.Connection)
+      .Where(
+        u => u.Friends.Any(f => f.Id == userId) ||
+        u.IsFriendsWith.Any(f => f.Id == userId) ||
+        u.Chats.Any(c => c.Users.Any(cu => cu.Id == userId))
+      )
+      .ToListAsync();
+    var connections = userFriends.Select(u => u.Connection.ConnectionId);
+    return connections.ToList();
   }
 }

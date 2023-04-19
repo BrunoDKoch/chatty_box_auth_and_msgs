@@ -14,8 +14,18 @@ public class MessagesHub : Hub {
   async public override Task OnConnectedAsync() {
     var id = this.Context.UserIdentifier;
     if (id == null) return;
-    var connection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
-    await base.OnConnectedAsync();
+    var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
+    try {
+      var friends = await _userDB.GetAnUsersFriends(id);
+      await Clients.Caller.SendAsync("friends", friends, default);
+      foreach (var friend in friends) {
+        var connection = await _messagesDB.GetClientConnection(friend.UserId);
+        if (connection == null) continue;
+        await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
+      }
+    } finally {
+      await base.OnConnectedAsync();
+    }
   }
 
   async public override Task OnDisconnectedAsync(Exception? exception) {
@@ -24,7 +34,10 @@ public class MessagesHub : Hub {
     }
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    await _messagesDB.DeleteConnection(userId);
+    var relevantConnections = await _messagesDB.DeleteConnection(userId);
+    foreach (var connection in relevantConnections) {
+      await Clients.Client(connection).SendAsync("updateStatus", userId, default);
+    }
     await base.OnDisconnectedAsync(exception);
   }
 
