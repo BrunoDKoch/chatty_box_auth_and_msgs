@@ -22,11 +22,15 @@ public class MessagesHub : Hub {
     if (exception != null) {
       Console.Error.WriteLine(exception);
     }
-    await _messagesDB.DeleteConnection(this.Context.ConnectionId);
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    await _messagesDB.DeleteConnection(userId);
     await base.OnDisconnectedAsync(exception);
   }
 
-  async public Task GetChatMessages(string userId, string chatId) {
+  async public Task GetChatMessages(string chatId) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
     var messages = await _messagesDB.GetMessagesFromChat(userId, chatId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("chatMessages", messages, default);
   }
@@ -39,7 +43,7 @@ public class MessagesHub : Hub {
   }
 
   async public Task StartTyping(string fromId, string chatId) {
-    var connections = await _messagesDB.GetAllConnections(chatId);
+    var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
     if (connections == null) return;
     foreach (var connection in connections) {
       await Clients.Client(connection.ConnectionId).SendAsync("typing", new { fromId, isTyping = true }, default);
@@ -47,7 +51,7 @@ public class MessagesHub : Hub {
   }
 
   async public Task StopTyping(string fromId, string chatId) {
-    var connections = await _messagesDB.GetAllConnections(chatId);
+    var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
     if (connections == null || connections.Count() == 0) return;
     foreach (var connection in connections) {
       await Clients.Client(connection.ConnectionId).SendAsync("typing", new { fromId, isTyping = false }, default);
@@ -58,7 +62,7 @@ public class MessagesHub : Hub {
     try {
       var message = await _messagesDB.CreateMessage(fromId, chatId, text);
       if (message == null) throw new Exception();
-      var connections = await _messagesDB.GetAllConnections(chatId);
+      var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
       foreach (var connection in connections) {
         await Clients.Client(connection.ConnectionId).SendAsync("newMessage", message, default);
       }
@@ -124,5 +128,13 @@ public class MessagesHub : Hub {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     await _userDB.HandleFriendRequest(userId, addingId, accept);
+  }
+
+  // Chat creation
+  async public Task CreateNewChat(string[] userIds, string? name, int? maxUsers) {
+    var chat = await _messagesDB.CreateChat(userIds, name, maxUsers);
+    foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
+      await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
+    }
   }
 }

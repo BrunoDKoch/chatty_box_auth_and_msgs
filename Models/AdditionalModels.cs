@@ -38,3 +38,9 @@ public class FriendsResponse {
   public string UserName { get; set; } = null!;
   public bool IsOnline { get; set; }
 }
+
+public class ChatMessage {
+  public User User { get; set; } = null!;
+  public Message Message { get; set; } = null!;
+  public bool IsFromCaller { get; set; }
+}

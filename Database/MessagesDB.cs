@@ -15,6 +15,7 @@ public class MessagesDB {
   async public Task<ClientConnection> CreateConnection(string userId, string connectionId) {
     using var ctx = new ChattyBoxContext();
     var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+    Console.WriteLine($"{existingConnection}");
     if (existingConnection != null) {
       existingConnection.ConnectionId = connectionId;
       await ctx.SaveChangesAsync();
@@ -49,6 +50,18 @@ public class MessagesDB {
     return newMessage;
   }
 
+  async public Task<Chat> CreateChat(string[] userIds, string? name, int? maxUsers) {
+    using var ctx = new ChattyBoxContext();
+    var newChat = new Chat {
+      ChatName = name,
+      Users = await ctx.Users.Where(u => userIds.Contains(u.Id)).ToListAsync(),
+      MaxUsers = maxUsers ?? 99
+    };
+    await ctx.Chats.AddAsync(newChat);
+    await ctx.SaveChangesAsync();
+    return newChat;
+  }
+
   // Read
   async public Task<List<Message>> GetLatestMessagesAsync(string userId) {
     using var ctx = new ChattyBoxContext();
@@ -65,13 +78,25 @@ public class MessagesDB {
     return latestMessages;
   }
 
-  async public Task<List<Message>> GetMessagesFromChat(string userId, string chatId) {
+  async public Task<List<ChatMessage>> GetMessagesFromChat(string userId, string chatId) {
     using var ctx = new ChattyBoxContext();
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     var messages = await ctx.Messages.Where(m => m.Chat.Users.First(u => u.Id == userId) != null && m.ChatId == chatId).ToListAsync();
-    return messages;
+    var messagesFromCaller = from message in messages where message.FromId == userId select new ChatMessage {
+      Message = message,
+      User = user,
+      IsFromCaller = true,
+    };
+    var messagesFromOthers = from message in messages where message.FromId != userId select new ChatMessage {
+      Message = message,
+      User = message.From,
+      IsFromCaller = false,
+    };
+    var filteredMessages = messagesFromCaller.Concat(messagesFromOthers).ToList();
+    return filteredMessages;
   }
 
-  async public Task<List<ClientConnection>> GetAllConnections(string chatId) {
+  async public Task<List<ClientConnection>> GetAllConnectionsToChat(string chatId) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     var connections = await ctx.ClientConnections.Where(c => chat.Users.Contains(c.User)).ToListAsync();
@@ -122,9 +147,10 @@ public class MessagesDB {
     
   }
 
-  async public Task DeleteConnection(string connectionId) {
+  async public Task DeleteConnection(string userId) {
     using var ctx = new ChattyBoxContext();
-    var connection = await ctx.ClientConnections.FirstAsync(c => c.ConnectionId == connectionId);
+    var connection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
     ctx.Remove(connection);
+    await ctx.SaveChangesAsync();
   }
 }
