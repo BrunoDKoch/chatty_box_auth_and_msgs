@@ -34,7 +34,7 @@ public class MessagesDB {
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     if (chat == null) return null;
     if (!chat.IsGroupChat) {
-      var isBlocked = await ctx.Blocks.AnyAsync(b => 
+      var isBlocked = await ctx.Blocks.AnyAsync(b =>
         (b.ANavigation.Id == fromId && chat.Users.Contains(b.BNavigation)) ||
         (b.BNavigation.Id == fromId && chat.Users.Contains(b.ANavigation))
       );
@@ -50,11 +50,13 @@ public class MessagesDB {
     return newMessage;
   }
 
-  async public Task<Chat> CreateChat(string[] userIds, string? name, int? maxUsers) {
+  async public Task<Chat> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
     using var ctx = new ChattyBoxContext();
     var newChat = new Chat {
+      Id = Guid.NewGuid().ToString(),
       ChatName = name,
-      Users = await ctx.Users.Where(u => userIds.Contains(u.Id)).ToListAsync(),
+      Users = await ctx.Users.Where(u => userIds.Contains(u.Id) || u.Id == mainUserId).ToListAsync(),
+      Admins = new List<User> { await ctx.Users.FirstAsync(u => u.Id == mainUserId) },
       MaxUsers = maxUsers ?? 99
     };
     await ctx.Chats.AddAsync(newChat);
@@ -63,25 +65,36 @@ public class MessagesDB {
   }
 
   // Read
-  async public Task<List<Message>> GetLatestMessagesAsync(string userId) {
+  async public Task<List<ChatPreview>> GetChatPreview(string userId) {
     using var ctx = new ChattyBoxContext();
-    var chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).ToListAsync();
-    var latestMessages = chats.Select(c => c.Messages.OrderBy(m => m.SentAt).First()).ToList();
-
-    // TODO: Implement this filter
-    var filteredMessages = from message in latestMessages select new MessagePreview {
-      From = message.From,
-      SentAt = message.SentAt,
-      Text = message.Text,
-      Chat = message.Chat,
-    };
-    return latestMessages;
+    var chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).Include(c => c.Users).ToListAsync();
+    var chatPreviews = chats.Select(c => new ChatPreview {
+      Id = c.Id,
+      Users = c.Users,
+      LastMessage = c.Messages.Count() > 0 ?
+        c.Messages
+        .OrderBy(m => m.SentAt)
+        .Select(m => new MessagePreview {
+          From = m.From,
+          SentAt = m.SentAt,
+          Text = m.Text
+        })
+        .First()
+        : null,
+      ChatName = c.ChatName ?? null
+    }).ToList();
+    return chatPreviews;
   }
 
-  async public Task<List<ChatMessage>> GetMessagesFromChat(string userId, string chatId) {
+  async public Task<Chat> GetMessagesFromChat(string userId, string chatId) {
     using var ctx = new ChattyBoxContext();
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     var messages = await ctx.Messages.Where(m => m.Chat.Users.First(u => u.Id == userId) != null && m.ChatId == chatId).ToListAsync();
+    if (messages.Count() == 0) {
+      return await ctx.Chats
+      .Include(c => c.Users)
+      .FirstAsync(c => c.Id == chatId);
+    }
     var messagesFromCaller = from message in messages where message.FromId == userId select new ChatMessage {
       Message = message,
       User = user,
@@ -93,7 +106,17 @@ public class MessagesDB {
       IsFromCaller = false,
     };
     var filteredMessages = messagesFromCaller.Concat(messagesFromOthers).ToList();
-    return filteredMessages;
+    var chat = await ctx.Chats
+      .Include(c => c.Users)
+      .Include(c => c.Messages
+        .Select(m => new ChatMessage {
+          Message = m,
+          User = m.From,
+          IsFromCaller = m.FromId == userId,
+        })
+      )
+      .FirstAsync(c => c.Id == chatId);
+    return chat;
   }
 
   async public Task<List<ClientConnection>> GetAllConnectionsToChat(string chatId) {
@@ -148,7 +171,7 @@ public class MessagesDB {
     var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
     if (userId == message.FromId) await HandleMessageDeletion(ctx, message);
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
-    
+
   }
 
   async public Task<List<string>> DeleteConnection(string userId) {

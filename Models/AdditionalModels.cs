@@ -31,7 +31,6 @@ public class MessagePreview {
   public User From { get; set; } = null!;
   public DateTime SentAt { get; set; }
   public string Text { get; set; } = null!;
-  public Chat Chat { get; set; } = null!;
 }
 
 public class FriendsResponse {
@@ -44,4 +43,21 @@ public class ChatMessage {
   public User User { get; set; } = null!;
   public Message Message { get; set; } = null!;
   public bool IsFromCaller { get; set; }
+}
+
+public class CompleteChatResponse {
+  public string Id { get; set; } = null!;
+  public bool IsGroupChat { get; set; }
+  public int MaxUsers { get; set; }
+  public string? ChatName { get; set; }
+  public DateTime CreatedAt { get; set; }
+  public ICollection<User> Users { get; set; } = new List<User>();
+  public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+}
+
+public class ChatPreview {
+  public string Id { get; set; } = null!;
+  public string? ChatName { get; set; } = null!;
+  public MessagePreview? LastMessage { get; set; } = null!;
+  public ICollection<User> Users { get; set; } = null!;
 }

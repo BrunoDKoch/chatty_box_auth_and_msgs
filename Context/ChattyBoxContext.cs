@@ -69,14 +69,14 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.Property(e => e.MaxUsers).HasDefaultValueSql("((2))");
       entity.HasMany<User>(e => e.Users).WithMany(u => u.Chats)
         .UsingEntity<ChatToUser>(
-          r => r.HasOne<User>().WithMany()
-            .HasForeignKey("A")
-            .HasConstraintName("_ChatToUser_A_fkey"),
-          l => l.HasOne<Chat>().WithMany()
+          r => r.HasOne(r => r.BNavigation).WithMany()
             .HasForeignKey("B")
             .HasConstraintName("_ChatToUser_B_fkey"),
+          l => l.HasOne(r => r.ANavigation).WithMany()
+            .HasForeignKey("A")
+            .HasConstraintName("_ChatToUser_A_fkey"),
           j => {
-            j.HasNoKey();
+            j.HasKey("A", "B").HasName("_ChatToUser_AB_unique");
             j.ToTable("_ChatToUser");
           });
     });

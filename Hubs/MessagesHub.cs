@@ -93,10 +93,10 @@ public class MessagesHub : Hub {
     await Clients.Client(this.Context.ConnectionId).SendAsync("read", id, default);
   }
 
-  async public Task GetMessagePreviews() {
+  async public Task GetChatPreviews() {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    var messages = await _messagesDB.GetLatestMessagesAsync(userId);
+    var messages = await _messagesDB.GetChatPreview(userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
   }
 
@@ -144,10 +144,21 @@ public class MessagesHub : Hub {
   }
 
   // Chat creation
-  async public Task CreateNewChat(string[] userIds, string? name, int? maxUsers) {
-    var chat = await _messagesDB.CreateChat(userIds, name, maxUsers);
+  async public Task CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
+    Console.WriteLine(chat.Id);
     foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
       await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
     }
+  }
+
+  // Fetching chat
+  async public Task GetChat(string chatId) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var chat = await _messagesDB.GetMessagesFromChat(userId, chatId);
+    await Clients.Caller.SendAsync("chat", chat, default);
   }
 }
