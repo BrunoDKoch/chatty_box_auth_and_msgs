@@ -65,6 +65,7 @@ public class MessagesDB {
         ReadAt = r.ReadAt,
         UserName = r.ReadBy.UserName!,
         Id = r.UserId,
+        Avatar = r.ReadBy.Avatar,
       })
         .ToList(),
       User = new UserPartialResponse {
@@ -146,7 +147,11 @@ public class MessagesDB {
         Id = c.Id,
         IsGroupChat = c.IsGroupChat,
         Messages = messages,
-        Users = c.Users,
+        Users = c.Users.Select(u => new UserPartialResponse {
+          UserName = u.UserName!,
+          Avatar = u.Avatar,
+          Id = u.Id,
+        }).ToList(),
         MaxUsers = c.MaxUsers,
         ChatName = c.ChatName,
         CreatedAt = c.CreatedAt,

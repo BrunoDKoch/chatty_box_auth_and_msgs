@@ -56,7 +56,7 @@ public class CompleteChatResponse {
   public int MaxUsers { get; set; }
   public string? ChatName { get; set; }
   public DateTime CreatedAt { get; set; }
-  public ICollection<User> Users { get; set; } = new List<User>();
+  public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }
 
