@@ -20,4 +20,12 @@ public partial class ReadMessage {
 
   [Column("readAt")]
   public DateTime ReadAt { get; set; }
+
+  [ForeignKey("MessageId")]
+  [InverseProperty("ReadBy")]
+  public virtual Message Message { get; set; } = null!;
+
+  [ForeignKey("UserId")]
+  [InverseProperty("ReadMessages")]
+  public virtual User ReadBy { get; set; } = null!;
 }

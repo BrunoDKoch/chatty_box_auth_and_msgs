@@ -29,7 +29,7 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
     return clientConnection;
   }
-  async public Task<ChatMessage?> CreateMessage(string fromId, string chatId, string text) {
+  async public Task<ChatMessage?> CreateMessage(string fromId, string chatId, string text, string? replyToId) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     if (chat == null) return null;
@@ -45,13 +45,33 @@ public class MessagesDB {
       FromId = fromId,
       ChatId = chatId,
       Text = text,
+      ReplyToId = replyToId,
     };
+    newMessage.ReadBy.Add(new ReadMessage {
+      UserId = fromId,
+      MessageId = newMessage.Id,
+    });
     await ctx.Messages.AddAsync(newMessage);
+    var user = await ctx.Users.FirstAsync(u => u.Id == fromId);
     await ctx.SaveChangesAsync();
     return new ChatMessage {
-      Message = newMessage,
+      Id = newMessage.Id,
+      Text = newMessage.Text,
+      ReplyToId = newMessage.ReplyToId,
+      SentAt = newMessage.SentAt,
+      EditedAt = newMessage.EditedAt,
       IsFromCaller = false,
-      User = await ctx.Users.FirstAsync(u => u.Id == fromId),
+      ReadBy = newMessage.ReadBy.Select(r => new ReadMessagePartialResponse {
+        ReadAt = r.ReadAt,
+        UserName = r.ReadBy.UserName!,
+        Id = r.UserId,
+      })
+        .ToList(),
+      User = new UserPartialResponse {
+        UserName = user.UserName!,
+        Avatar = user.Avatar,
+        Id = user.Id,
+      },
     };
   }
 
@@ -98,10 +118,26 @@ public class MessagesDB {
       .Where(m => m.ChatId == chatId)
       .Include(m => m.From)
       .Include(m => m.Chat)
+      .Include(m => m.ReadBy)
+      .ThenInclude(r => r.ReadBy)
       .Select(m => new ChatMessage {
-        User = m.From ?? ctx.Users.First(u => u.Id == m.FromId),
-        Message = m,
-        IsFromCaller = m.FromId == userId
+        Id = m.Id,
+        User = new UserPartialResponse {
+          UserName = m.From.UserName!,
+          Id = m.FromId,
+          Avatar = m.From.Avatar,
+        },
+        SentAt = m.SentAt,
+        EditedAt = m.EditedAt,
+        Text = m.Text,
+        ReplyToId = m.ReplyToId,
+        IsFromCaller = m.FromId == userId,
+        ReadBy = m.ReadBy.Select(r => new ReadMessagePartialResponse {
+          UserName = r.ReadBy.UserName!,
+          Id = r.ReadBy.Id,
+          Avatar = r.ReadBy.Avatar,
+          ReadAt = r.ReadAt,
+        }).ToList()
       })
       .ToListAsync();
     var completeChat = await ctx.Chats
@@ -129,7 +165,7 @@ public class MessagesDB {
 
   async public Task<int> CountUnreadMessages(string userId) {
     using var ctx = new ChattyBoxContext();
-    var count = await ctx.Messages.CountAsync(m => m.Chat.Users.Any(u => u.Id == userId) && !m.ReadBy.Any(u => u.Id == userId));
+    var count = await ctx.Messages.CountAsync(m => m.Chat.Users.Any(u => u.Id == userId) && !m.ReadBy.Any(u => u.UserId == userId));
     return count;
   }
 
@@ -155,13 +191,12 @@ public class MessagesDB {
 
   async public Task<Message> MarkAsRead(string messageId, string userId) {
     using var ctx = new ChattyBoxContext();
-    var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
-    var readMessage = new ReadMessage {
+    var message = await ctx.Messages.Include(m => m.ReadBy).FirstAsync(m => m.Id == messageId);
+    if (message.ReadBy.Any(r => r.UserId == userId)) return message;
+    message.ReadBy.Add(new ReadMessage {
       UserId = userId,
       MessageId = messageId,
-      ReadAt = DateTime.UtcNow
-    };
-    await ctx.ReadMessages.AddAsync(readMessage);
+    });
     await ctx.SaveChangesAsync();
     return message;
   }

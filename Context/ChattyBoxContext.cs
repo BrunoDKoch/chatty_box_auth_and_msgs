@@ -112,11 +112,18 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
         .OnDelete(DeleteBehavior.ClientSetNull)
         .IsRequired(false)
         .HasConstraintName("Message_replyToId_fkey");
-
     });
 
     modelBuilder.Entity<ReadMessage>(entity => {
       entity.HasKey(e => new { e.MessageId, e.UserId }).HasName("ReadMessage_pkey");
+
+      entity.HasOne(d => d.Message).WithMany(p => p.ReadBy)
+          .OnDelete(DeleteBehavior.ClientSetNull)
+          .HasConstraintName("ReadMessage_messageId_fkey");
+
+      entity.HasOne(d => d.ReadBy).WithMany(p => p.ReadMessages)
+          .OnDelete(DeleteBehavior.ClientSetNull)
+          .HasConstraintName("ReadMessage_userId_fkey");
 
       entity.Property(e => e.ReadAt).HasDefaultValueSql("(getdate())");
     });

@@ -44,9 +44,8 @@ public partial class User : IdentityUser {
   [InverseProperty("Admins")]
   public virtual ICollection<Chat> IsAdminIn { get; set; } = new List<Chat>();
 
-  [ForeignKey("MessageId")]
   [InverseProperty("ReadBy")]
-  public virtual ICollection<Message> ReadMessages { get; set; } = new List<Message>();
+  public virtual ICollection<ReadMessage> ReadMessages { get; set; } = new List<ReadMessage>();
 
   [InverseProperty("IsFriendsWith")]
   public virtual ICollection<User> Friends { get; set; } = new List<User>();

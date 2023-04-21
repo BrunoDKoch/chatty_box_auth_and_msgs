@@ -77,17 +77,21 @@ public class MessagesHub : Hub {
     await HandleTyping(fromId, chatId, false);
   }
 
-  async public Task SendMessage(string chatId, string text) {
+  async public Task SendMessage(string chatId, string text, string? replyToId) {
     var fromId = this.Context.UserIdentifier;
     if (fromId == null) return;
     try {
-      var message = await _messagesDB.CreateMessage(fromId, chatId, text);
+      var message = await _messagesDB.CreateMessage(fromId, chatId, text, replyToId);
       if (message == null) throw new Exception();
       var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
       foreach (var connection in connections) {
+        if (connection.UserId == fromId) {
+          message.IsFromCaller = true;
+        } else {
+          message.IsFromCaller = false;
+        }
         await Clients.Client(connection.ConnectionId).SendAsync("newMessage", message, default);
       }
-      await Clients.Caller.SendAsync("newMessage", message, default);
     } catch (Exception e) {
       Console.WriteLine(e);
       await Clients.Caller.SendAsync("msgError", default);

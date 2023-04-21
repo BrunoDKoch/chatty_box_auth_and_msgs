@@ -40,9 +40,14 @@ public class FriendsResponse {
 }
 
 public class ChatMessage {
-  public User User { get; set; } = null!;
-  public Message Message { get; set; } = null!;
+  public string Id { get; set; } = null!;
+  public DateTime SentAt { get; set; }
+  public DateTime EditedAt { get; set; }
+  public string Text { get; set; } = null!;
+  public string? ReplyToId { get; set; } = null!;
+  public UserPartialResponse User { get; set; } = null!;
   public bool IsFromCaller { get; set; }
+  public ICollection<ReadMessagePartialResponse> ReadBy { get; set; } = new List<ReadMessagePartialResponse>();
 }
 
 public class CompleteChatResponse {
@@ -61,4 +66,14 @@ public class ChatPreview {
   public MessagePreview? LastMessage { get; set; } = null!;
   public ICollection<User> Users { get; set; } = null!;
   public DateTime CreatedAt { get; set; }
+}
+
+public class UserPartialResponse {
+  public string Id { get; set; } = null!;
+  public string UserName { get; set; } = null!;
+  public string? Avatar { get; set; } = null!;
+}
+
+public class ReadMessagePartialResponse : UserPartialResponse {
+  public DateTime ReadAt;
 }

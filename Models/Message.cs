@@ -50,7 +50,6 @@ public partial class Message {
   [InverseProperty("InverseReplyTo")]
   public virtual Message ReplyTo { get; set; } = null!;
 
-  [ForeignKey("UserId")]
-  [InverseProperty("ReadMessages")]
-  public virtual ICollection<User> ReadBy { get; set; } = new List<User>();
+  [InverseProperty("Message")]
+  public virtual ICollection<ReadMessage> ReadBy { get; set; } = new List<ReadMessage>();
 }
