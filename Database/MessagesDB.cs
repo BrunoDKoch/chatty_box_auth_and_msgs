@@ -140,6 +140,7 @@ public class MessagesDB {
           ReadAt = r.ReadAt,
         }).ToList()
       })
+      .OrderBy(m => m.SentAt)
       .ToListAsync();
     var completeChat = await ctx.Chats
       .Include(c => c.Users)
