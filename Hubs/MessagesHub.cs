@@ -11,6 +11,16 @@ public class MessagesHub : Hub {
   private MessagesDB _messagesDB = new MessagesDB();
   private UserDB _userDB = new UserDB();
 
+  async private Task HandleTyping(string fromId, string chatId, bool isTyping) {
+    var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
+    if (connections == null || connections.Count() == 0) return;
+    var from = await _userDB.GetSpecificUser(fromId);
+    foreach (var connection in connections) {
+      if (connection.UserId == fromId) continue;
+      await Clients.Client(connection.ConnectionId).SendAsync("typing", new { from = from.UserName, isTyping }, default);
+    }
+  }
+
   async public override Task OnConnectedAsync() {
     var id = this.Context.UserIdentifier;
     if (id == null) return;
@@ -55,23 +65,21 @@ public class MessagesHub : Hub {
     await Clients.Client(this.Context.ConnectionId).SendAsync("unread", count, default);
   }
 
-  async public Task StartTyping(string fromId, string chatId) {
-    var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
-    if (connections == null) return;
-    foreach (var connection in connections) {
-      await Clients.Client(connection.ConnectionId).SendAsync("typing", new { fromId, isTyping = true }, default);
-    }
+  async public Task StartTyping(string chatId) {
+    var fromId = this.Context.UserIdentifier;
+    if (fromId == null) return;
+    await HandleTyping(fromId, chatId, true);
   }
 
-  async public Task StopTyping(string fromId, string chatId) {
-    var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
-    if (connections == null || connections.Count() == 0) return;
-    foreach (var connection in connections) {
-      await Clients.Client(connection.ConnectionId).SendAsync("typing", new { fromId, isTyping = false }, default);
-    }
+  async public Task StopTyping(string chatId) {
+    var fromId = this.Context.UserIdentifier;
+    if (fromId == null) return;
+    await HandleTyping(fromId, chatId, false);
   }
 
-  async public Task SendMessage(string fromId, string chatId, string text) {
+  async public Task SendMessage(string chatId, string text) {
+    var fromId = this.Context.UserIdentifier;
+    if (fromId == null) return;
     try {
       var message = await _messagesDB.CreateMessage(fromId, chatId, text);
       if (message == null) throw new Exception();

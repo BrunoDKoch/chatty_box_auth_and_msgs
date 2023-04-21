@@ -60,4 +60,5 @@ public class ChatPreview {
   public string? ChatName { get; set; } = null!;
   public MessagePreview? LastMessage { get; set; } = null!;
   public ICollection<User> Users { get; set; } = null!;
+  public DateTime CreatedAt { get; set; }
 }

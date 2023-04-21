@@ -64,6 +64,11 @@ public class UserDB {
     return requests;
   }
 
+  async public Task<User> GetSpecificUser(string userId) {
+    using var ctx = new ChattyBoxContext();
+    return await ctx.Users.FirstAsync(u => u.Id == userId);
+  }
+
   // Update
 
   async public Task HandleFriendRequest(string userId, string addingId, bool accepting) {

@@ -101,8 +101,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.Property(e => e.SentAt).HasDefaultValueSql("(getdate())");
 
       entity.HasOne(d => d.Chat).WithMany(p => p.Messages)
-      .OnDelete(DeleteBehavior.ClientSetNull)
-      .HasConstraintName("Message_chatId_fkey");
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("Message_chatId_fkey");
 
       entity.HasOne(d => d.From).WithMany(p => p.Messages)
         .OnDelete(DeleteBehavior.ClientSetNull)
@@ -110,6 +110,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
       entity.HasOne(d => d.ReplyTo).WithMany(p => p.InverseReplyTo)
         .OnDelete(DeleteBehavior.ClientSetNull)
+        .IsRequired(false)
         .HasConstraintName("Message_replyToId_fkey");
 
     });

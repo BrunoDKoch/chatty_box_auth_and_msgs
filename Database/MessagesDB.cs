@@ -29,7 +29,7 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
     return clientConnection;
   }
-  async public Task<Message?> CreateMessage(string fromId, string chatId, string text) {
+  async public Task<ChatMessage?> CreateMessage(string fromId, string chatId, string text) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     if (chat == null) return null;
@@ -41,13 +41,18 @@ public class MessagesDB {
       if (isBlocked) return null;
     }
     var newMessage = new Message {
+      Id = Guid.NewGuid().ToString(),
       FromId = fromId,
       ChatId = chatId,
       Text = text,
     };
     await ctx.Messages.AddAsync(newMessage);
     await ctx.SaveChangesAsync();
-    return newMessage;
+    return new ChatMessage {
+      Message = newMessage,
+      IsFromCaller = false,
+      User = await ctx.Users.FirstAsync(u => u.Id == fromId),
+    };
   }
 
   async public Task<Chat> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
@@ -67,13 +72,14 @@ public class MessagesDB {
   // Read
   async public Task<List<ChatPreview>> GetChatPreview(string userId) {
     using var ctx = new ChattyBoxContext();
-    var chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).Include(c => c.Users).ToListAsync();
+    var chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).Include(c => c.Users).Include(c => c.Messages).ToListAsync();
     var chatPreviews = chats.Select(c => new ChatPreview {
       Id = c.Id,
       Users = c.Users,
+      CreatedAt = c.CreatedAt,
       LastMessage = c.Messages.Count() > 0 ?
         c.Messages
-        .OrderBy(m => m.SentAt)
+        .OrderByDescending(m => m.SentAt)
         .Select(m => new MessagePreview {
           From = m.From,
           SentAt = m.SentAt,
@@ -86,43 +92,38 @@ public class MessagesDB {
     return chatPreviews;
   }
 
-  async public Task<Chat> GetMessagesFromChat(string userId, string chatId) {
+  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId) {
     using var ctx = new ChattyBoxContext();
-    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
-    var messages = await ctx.Messages.Where(m => m.Chat.Users.First(u => u.Id == userId) != null && m.ChatId == chatId).ToListAsync();
-    if (messages.Count() == 0) {
-      return await ctx.Chats
+    var messages = await ctx.Messages
+      .Where(m => m.ChatId == chatId)
+      .Include(m => m.From)
+      .Include(m => m.Chat)
+      .Select(m => new ChatMessage {
+        User = m.From ?? ctx.Users.First(u => u.Id == m.FromId),
+        Message = m,
+        IsFromCaller = m.FromId == userId
+      })
+      .ToListAsync();
+    var completeChat = await ctx.Chats
       .Include(c => c.Users)
+      .Select(c => new CompleteChatResponse {
+        Id = c.Id,
+        IsGroupChat = c.IsGroupChat,
+        Messages = messages,
+        Users = c.Users,
+        MaxUsers = c.MaxUsers,
+        ChatName = c.ChatName,
+        CreatedAt = c.CreatedAt,
+      })
       .FirstAsync(c => c.Id == chatId);
-    }
-    var messagesFromCaller = from message in messages where message.FromId == userId select new ChatMessage {
-      Message = message,
-      User = user,
-      IsFromCaller = true,
-    };
-    var messagesFromOthers = from message in messages where message.FromId != userId select new ChatMessage {
-      Message = message,
-      User = message.From,
-      IsFromCaller = false,
-    };
-    var filteredMessages = messagesFromCaller.Concat(messagesFromOthers).ToList();
-    var chat = await ctx.Chats
-      .Include(c => c.Users)
-      .Include(c => c.Messages
-        .Select(m => new ChatMessage {
-          Message = m,
-          User = m.From,
-          IsFromCaller = m.FromId == userId,
-        })
-      )
-      .FirstAsync(c => c.Id == chatId);
-    return chat;
+
+    return completeChat;
   }
 
   async public Task<List<ClientConnection>> GetAllConnectionsToChat(string chatId) {
     using var ctx = new ChattyBoxContext();
-    var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
-    var connections = await ctx.ClientConnections.Where(c => chat.Users.Contains(c.User)).ToListAsync();
+    var chat = await ctx.Chats.Include(c => c.Users).FirstAsync(c => c.Id == chatId);
+    var connections = await ctx.ClientConnections.Include(c => c.User).Where(c => chat.Users.Contains(c.User)).ToListAsync();
     return connections;
   }
 

@@ -33,7 +33,7 @@ public partial class Message {
 
   [Column("replyToId")]
   [StringLength(1000)]
-  public string ReplyToId { get; set; } = null!;
+  public string? ReplyToId { get; set; } = null!;
 
   [ForeignKey("ChatId")]
   [InverseProperty("Messages")]
