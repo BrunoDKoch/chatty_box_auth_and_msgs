@@ -27,6 +27,10 @@ public class EmailValidationRequest {
   public string Code { get; set; } = null!;
 }
 
+public class LocationValidationRequest : EmailValidationRequest {
+  public string Email { get; set; } = null!;
+}
+
 public class MessagePreview {
   public User From { get; set; } = null!;
   public DateTime SentAt { get; set; }

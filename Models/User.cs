@@ -30,6 +30,9 @@ public partial class User : IdentityUser {
   public virtual ICollection<UserLogin> UserLogins { get; set; } = new List<UserLogin>();
 
   [InverseProperty("User")]
+  public virtual ICollection<UserLoginAttempt> UserLoginAttempts { get; set; } = new List<UserLoginAttempt>();
+
+  [InverseProperty("User")]
   public virtual ICollection<UserToken> UserTokens { get; set; } = new List<UserToken>();
 
   [ForeignKey("UserId")]

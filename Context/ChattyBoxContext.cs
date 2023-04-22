@@ -39,6 +39,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public override DbSet<UserLogin> UserLogins { get; set; } = null!;
 
+  public virtual DbSet<UserLoginAttempt> UserLoginAttempts { get; set; } = null!;
+
   public override DbSet<UserRole> UserRoles { get; set; } = null!;
 
   public override DbSet<UserToken> UserTokens { get; set; } = null!;
@@ -198,6 +200,16 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
     modelBuilder.Entity<UserLogin>(entity => {
       entity.HasOne(d => d.User).WithMany(p => p.UserLogins).HasConstraintName("FK_UserLogins_Users_UserId");
+    });
+
+    modelBuilder.Entity<UserLoginAttempt>(entity => {
+      entity.HasKey(e => e.Id).HasName("UserLoginAttempt_pkey");
+
+      entity.Property(e => e.AttemptedAt).HasDefaultValueSql("(getdate())");
+
+      entity.HasOne(d => d.User).WithMany(p => p.UserLoginAttempts)
+          .OnDelete(DeleteBehavior.ClientSetNull)
+          .HasConstraintName("UserLoginAttempt_userId_fkey");
     });
 
     modelBuilder.Entity<UserToken>(entity => {

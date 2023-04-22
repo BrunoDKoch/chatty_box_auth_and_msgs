@@ -8,6 +8,7 @@ using ChattyBox.Context;
 using ChattyBox.Models;
 using ChattyBox.Hubs;
 using ChattyBox.Misc;
+using MaxMind.GeoIP2;
 
 var reqOrigin = "_reqOrigin";
 
@@ -74,6 +75,9 @@ builder.Services.AddCookiePolicy(options => {
 });
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+
+builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
+builder.Services.AddHttpClient<WebServiceClient>();
 
 var app = builder.Build();
 
