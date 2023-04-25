@@ -56,6 +56,7 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
     return new ChatMessage {
       Id = newMessage.Id,
+      ChatId = chatId,
       Text = newMessage.Text,
       ReplyToId = newMessage.ReplyToId,
       SentAt = newMessage.SentAt,
@@ -93,18 +94,34 @@ public class MessagesDB {
   // Read
   async public Task<List<ChatPreview>> GetChatPreview(string userId) {
     using var ctx = new ChattyBoxContext();
-    var chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).Include(c => c.Users).Include(c => c.Messages).ToListAsync();
+    var chats = await ctx.Chats
+      .Where(
+        c => c.Users.Any(u => u.Id == userId)
+      )
+      .Include(c => c.Users)
+      .Include(c => c.Messages)
+      .ThenInclude(m => m.ReadBy)
+      .ToListAsync();
     var chatPreviews = chats.Select(c => new ChatPreview {
       Id = c.Id,
-      Users = c.Users,
+      Users = c.Users.Select(u => new UserPartialResponse{
+        UserName = u.UserName!,
+        Avatar = u.Avatar,
+        Id = u.Id
+      }).ToList(),
       CreatedAt = c.CreatedAt,
       LastMessage = c.Messages.Count() > 0 ?
         c.Messages
         .OrderByDescending(m => m.SentAt)
         .Select(m => new MessagePreview {
-          From = m.From,
+          From = new UserPartialResponse {
+            Id = m.FromId,
+            UserName = m.From.UserName!,
+            Avatar = m.From.Avatar,
+          },
           SentAt = m.SentAt,
-          Text = m.Text
+          Text = m.Text,
+          Read = m.ReadBy.Any(r => r.UserId == userId) || m.FromId == userId,
         })
         .First()
         : null,
@@ -128,6 +145,7 @@ public class MessagesDB {
           Id = m.FromId,
           Avatar = m.From.Avatar,
         },
+        ChatId = chatId,
         SentAt = m.SentAt,
         EditedAt = m.EditedAt,
         Text = m.Text,

@@ -51,6 +51,13 @@ public class MessagesHub : Hub {
     await base.OnDisconnectedAsync(exception);
   }
 
+  async public Task GetCallerInfo() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userDB.GetSpecificUser(userId);
+    await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
+  }
+
   async public Task GetChatMessages(string chatId) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;

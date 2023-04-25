@@ -89,11 +89,8 @@ public class UserController : ControllerBase {
     try {
       // TODO: when ready for deployment, remove if statement
       IPAddress ipAddress;
-      if (HttpContext.Connection.RemoteIpAddress == null || HttpContext.Connection.RemoteIpAddress.ToString() == "::1") {
-        var rand = new Random();
-        var octets = new byte[4];
-        rand.NextBytes(octets);
-        ipAddress = new IPAddress(octets);
+      if (HttpContext.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(HttpContext.Connection.RemoteIpAddress.ToString())) {
+        ipAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
       } else {
         ipAddress = HttpContext.Connection.RemoteIpAddress;
       }
@@ -105,9 +102,9 @@ public class UserController : ControllerBase {
         .Any(
           l =>
             l.Success &&
-            CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 200
+            CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 20000
         );
-      
+
       if (suspiciousLocation) {
         var newLocationVerification = new Random().Next(100000, 999999).ToString();
         var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
@@ -120,8 +117,11 @@ public class UserController : ControllerBase {
 
       await ctx.UserLoginAttempts.AddAsync(loginAttempt);
       await ctx.SaveChangesAsync();
-      if (!loginAttempt.Success) return Unauthorized();
-      
+      if (!loginAttempt.Success) {
+        await _userManager.AccessFailedAsync(user);
+        return Unauthorized();
+      };
+      await _userManager.ResetAccessFailedCountAsync(user);
       await _userManager.UpdateSecurityStampAsync(user);
       return Ok();
     } catch (Exception e) {
@@ -137,7 +137,7 @@ public class UserController : ControllerBase {
     var user = await _userManager.GetUserAsync(userClaim);
     if (user == null) return BadRequest();
     await _signInManager.SignOutAsync();
-    return Ok();
+    return SignOut();
   }
 
   [HttpGet("Current")]

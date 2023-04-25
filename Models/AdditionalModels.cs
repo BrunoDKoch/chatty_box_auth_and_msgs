@@ -32,9 +32,10 @@ public class LocationValidationRequest : EmailValidationRequest {
 }
 
 public class MessagePreview {
-  public User From { get; set; } = null!;
+  public UserPartialResponse From { get; set; } = null!;
   public DateTime SentAt { get; set; }
   public string Text { get; set; } = null!;
+  public bool Read { get; set; }
 }
 
 public class FriendsResponse {
@@ -45,6 +46,7 @@ public class FriendsResponse {
 
 public class ChatMessage {
   public string Id { get; set; } = null!;
+  public string ChatId { get; set; } = null!;
   public DateTime SentAt { get; set; }
   public DateTime EditedAt { get; set; }
   public string Text { get; set; } = null!;
@@ -68,7 +70,7 @@ public class ChatPreview {
   public string Id { get; set; } = null!;
   public string? ChatName { get; set; } = null!;
   public MessagePreview? LastMessage { get; set; } = null!;
-  public ICollection<User> Users { get; set; } = null!;
+  public ICollection<UserPartialResponse> Users { get; set; } = null!;
   public DateTime CreatedAt { get; set; }
 }
 
