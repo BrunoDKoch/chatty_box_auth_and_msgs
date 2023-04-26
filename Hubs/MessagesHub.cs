@@ -180,4 +180,19 @@ public class MessagesHub : Hub {
     var chat = await _messagesDB.GetMessagesFromChat(userId, chatId);
     await Clients.Caller.SendAsync("chat", chat, default);
   }
+
+  // User settings
+  async public Task GetNotificationSettings() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var settings = await _userDB.GetNotificationSettings(userId);
+    await Clients.Caller.SendAsync("notificationSettings", settings, default);
+  }
+
+  async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
+    await Clients.Caller.SendAsync("notificationSettings", settings, default);
+  }
 }

@@ -69,6 +69,20 @@ public class UserDB {
     return await ctx.Users.FirstAsync(u => u.Id == userId);
   }
 
+  async public Task<UserNotificationSetting?> GetNotificationSettings(string userId) {
+    using var ctx = new ChattyBoxContext();
+    var user = await ctx.Users.Include(u => u.UserNotificationSetting).FirstAsync(u => u.Id == userId);
+    if (user == null) return null;
+    if (user.UserNotificationSetting == null) {
+      user.UserNotificationSetting = new UserNotificationSetting {
+        PlaySound = true,
+        ShowOSNotification = true,
+      };
+      await ctx.SaveChangesAsync();
+    }
+    return user.UserNotificationSetting;
+  }
+
   // Update
 
   async public Task HandleFriendRequest(string userId, string addingId, bool accepting) {
@@ -83,5 +97,14 @@ public class UserDB {
       user.IsFriendsWith.Add(adding);
     }
     await ctx.SaveChangesAsync();
+  }
+
+  async public Task<UserNotificationSetting> UpdateUserNotificationSettings(string userId, bool playSound, bool showOSNotification) {
+    using var ctx = new ChattyBoxContext();
+    var settings = await ctx.UserNotificationSettings.FirstAsync(n => n.UserId == userId);
+    settings.PlaySound = playSound;
+    settings.ShowOSNotification = showOSNotification;
+    await ctx.SaveChangesAsync();
+    return settings;
   }
 }

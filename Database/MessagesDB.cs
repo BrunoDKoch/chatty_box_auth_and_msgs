@@ -213,16 +213,17 @@ public class MessagesDB {
     return message;
   }
 
-  async public Task<Message> MarkAsRead(string messageId, string userId) {
+  async public Task<ReadMessage> MarkAsRead(string messageId, string userId) {
     using var ctx = new ChattyBoxContext();
     var message = await ctx.Messages.Include(m => m.ReadBy).FirstAsync(m => m.Id == messageId);
-    if (message.ReadBy.Any(r => r.UserId == userId)) return message;
-    message.ReadBy.Add(new ReadMessage {
+    if (message.ReadBy.Any(r => r.UserId == userId)) return message.ReadBy.First(r => r.UserId == userId);
+    var readMessage = new ReadMessage {
       UserId = userId,
       MessageId = messageId,
-    });
+    };
+    message.ReadBy.Add(readMessage);
     await ctx.SaveChangesAsync();
-    return message;
+    return readMessage;
   }
 
   // Delete

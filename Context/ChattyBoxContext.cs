@@ -20,6 +20,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public virtual DbSet<ClientConnection> ClientConnections { get; set; } = null!;
 
   public virtual DbSet<Chat> Chats { get; set; } = null!;
+  public virtual DbSet<ChatNotificationSetting> ChatNotificationSettings { get; set; }
 
   public virtual DbSet<ChatToUser> ChatToUsers { get; set; } = null!;
 
@@ -40,6 +41,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public override DbSet<UserLogin> UserLogins { get; set; } = null!;
 
   public virtual DbSet<UserLoginAttempt> UserLoginAttempts { get; set; } = null!;
+
+  public virtual DbSet<UserNotificationSetting> UserNotificationSettings { get; set; }
 
   public override DbSet<UserRole> UserRoles { get; set; } = null!;
 
@@ -81,6 +84,21 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
             j.HasKey("A", "B").HasName("_ChatToUser_AB_unique");
             j.ToTable("_ChatToUser");
           });
+    });
+
+    modelBuilder.Entity<ChatNotificationSetting>(entity => {
+      entity.HasKey(e => new { e.UserId, e.ChatId }).HasName("ChatNotificationSettings_pkey");
+
+      entity.Property(e => e.PlaySound).HasDefaultValueSql("((1))");
+      entity.Property(e => e.ShowOSNotification).HasDefaultValueSql("((1))");
+
+      entity.HasOne(d => d.Chat).WithOne(p => p.ChatNotificationSetting)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("ChatNotificationSettings_chatId_fkey");
+
+      entity.HasOne(d => d.User).WithOne(p => p.ChatNotificationSetting)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("ChatNotificationSettings_userId_fkey");
     });
 
     modelBuilder.Entity<FriendRequest>(entity => {
@@ -210,6 +228,17 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.HasOne(d => d.User).WithMany(p => p.UserLoginAttempts)
           .OnDelete(DeleteBehavior.ClientSetNull)
           .HasConstraintName("UserLoginAttempt_userId_fkey");
+    });
+
+    modelBuilder.Entity<UserNotificationSetting>(entity => {
+      entity.HasKey(e => e.UserId).HasName("UserNotificationSettings_pkey");
+
+      entity.Property(e => e.PlaySound).HasDefaultValueSql("((1))");
+      entity.Property(e => e.ShowOSNotification).HasDefaultValueSql("((1))");
+
+      entity.HasOne(d => d.User).WithOne(p => p.UserNotificationSetting)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("UserNotificationSettings_userId_fkey");
     });
 
     modelBuilder.Entity<UserToken>(entity => {

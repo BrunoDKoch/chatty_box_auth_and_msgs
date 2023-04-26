@@ -67,4 +67,10 @@ public partial class User : IdentityUser {
 
   [InverseProperty("UserBeingAdded")]
   public virtual ICollection<FriendRequest> FriendRequestsReceived { get; set; } = new List<FriendRequest>();
+
+  [InverseProperty("User")]
+  public virtual ChatNotificationSetting? ChatNotificationSetting { get; set; }
+
+  [InverseProperty("User")]
+  public virtual UserNotificationSetting? UserNotificationSetting { get; set; }
 }

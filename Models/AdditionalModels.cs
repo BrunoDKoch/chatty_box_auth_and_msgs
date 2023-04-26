@@ -14,6 +14,10 @@ public class UserCreate : User {
     Email = data.Email;
     UserName = data.UserName;
     PasswordHash = passwordHasher.HashPassword(this, data.Password);
+    UserNotificationSetting = new UserNotificationSetting {
+      PlaySound = true,
+      ShowOSNotification = true,
+    };
   }
 }
 

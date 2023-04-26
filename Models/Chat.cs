@@ -35,4 +35,7 @@ public partial class Chat {
   [ForeignKey("UserId")]
   [InverseProperty("IsAdminIn")]
   public virtual ICollection<User> Admins { get; set; } = new List<User>();
+
+  [InverseProperty("Chat")]
+  public virtual ChatNotificationSetting? ChatNotificationSetting { get; set; }
 }
