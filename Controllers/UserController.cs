@@ -6,6 +6,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using MaxMind.GeoIP2;
 using System.Net;
+using ChattyBox.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChattyBox.Controllers;
@@ -19,18 +20,21 @@ public class UserController : ControllerBase {
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
   private readonly WebServiceClient _maxMindClient;
+  private readonly IWebHostEnvironment _webHostEnvironment;
 
   public UserController(
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
       SignInManager<User> signInManager,
-      WebServiceClient maxMindClient) {
+      WebServiceClient maxMindClient,
+      IWebHostEnvironment webHostEnvironment) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
     _maxMindClient = maxMindClient;
+    _webHostEnvironment = webHostEnvironment;
   }
 
   private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -190,6 +194,22 @@ public class UserController : ControllerBase {
     loginAttempt.Success = true;
     await ctx.SaveChangesAsync();
     return Ok();
+  }
+
+  // Images
+  [HttpPost("Avatar")]
+  async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
+    var user = await _userManager.GetUserAsync(HttpContext.User);
+    if (user == null) return Unauthorized();
+    try {
+      var avatar = await ImageService.SaveImage(file, user, _webHostEnvironment);
+      user.Avatar = avatar;
+      await _userManager.UpdateAsync(user);
+      return Ok(avatar);
+    } catch (Exception e) {
+      Console.Error.WriteLine(e);
+      return StatusCode(500);
+    }
   }
 
   // Misc

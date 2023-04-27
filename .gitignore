@@ -4,3 +4,7 @@ obj/
 Properties/
 appsettings*.json
 *.sql
+static/
+cache/
+*.jpg
+*.meta

@@ -9,6 +9,9 @@ using ChattyBox.Models;
 using ChattyBox.Hubs;
 using ChattyBox.Misc;
 using MaxMind.GeoIP2;
+using SixLabors.ImageSharp.Web.DependencyInjection;
+using SixLabors.ImageSharp.Web.Providers;
+using SixLabors.ImageSharp.Web.Caching;
 
 var reqOrigin = "_reqOrigin";
 
@@ -74,10 +77,22 @@ builder.Services.AddCookiePolicy(options => {
   options.MinimumSameSitePolicy = SameSiteMode.None;
 });
 
+var provider = builder.Environment.ContentRootFileProvider;
+
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
 
+builder.Services.AddImageSharp()
+  .Configure<PhysicalFileSystemProviderOptions>(options => {
+    options.ProviderRootPath = ".";
+  })
+  .Configure<PhysicalFileSystemCacheOptions>(options => {
+    options.CacheRootPath = "./";
+    options.CacheFolder = "cache";
+  })
+  .AddProvider<PhysicalFileSystemProvider>();
 builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
 builder.Services.AddHttpClient<WebServiceClient>();
+
 
 var app = builder.Build();
 
@@ -98,6 +113,10 @@ app.UseRouting();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+//app.UseStaticFiles();
+
+app.UseImageSharp();
 
 app.UseEndpoints(endpoints => {
   endpoints.MapControllers();

@@ -87,3 +87,10 @@ public class UserPartialResponse {
 public class ReadMessagePartialResponse : UserPartialResponse {
   public DateTime ReadAt;
 }
+
+public enum ImageSize {
+  Small,
+  Medium,
+  Large,
+  Full
+}
