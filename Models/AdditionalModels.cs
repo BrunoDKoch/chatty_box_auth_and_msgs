@@ -25,6 +25,8 @@ public class LogInInfo {
   public string Email { get; set; } = null!;
   public string Password { get; set; } = null!;
   public bool Remember { get; set; } = false;
+  public string? MFACode { get; set; }
+  public bool RememberMultiFactor { get; set; } = false;
 }
 
 public class EmailValidationRequest {
@@ -93,4 +95,9 @@ public enum ImageSize {
   Medium,
   Large,
   Full
+}
+
+public class LoginAttemptsResponse {
+  public List<UserLoginAttempt> UserLoginAttempts = new List<UserLoginAttempt>();
+  public int Count { get; set; }
 }

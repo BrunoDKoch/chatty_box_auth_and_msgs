@@ -1,10 +1,27 @@
 using ChattyBox.Models;
 using ChattyBox.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 namespace ChattyBox.Database;
 
 public class UserDB {
+
+  private readonly UserManager<User> _userManager;
+  private readonly RoleManager<Role> _roleManager;
+  private readonly IConfiguration _configuration;
+  private readonly SignInManager<User> _signInManager;
+
+  public UserDB(
+      UserManager<User> userManager,
+      RoleManager<Role> roleManager,
+      IConfiguration configuration,
+      SignInManager<User> signInManager) {
+    _userManager = userManager;
+    _roleManager = roleManager;
+    _configuration = configuration;
+    _signInManager = signInManager;
+  }
   // Create
   async public Task<FriendRequest?> CreateFriendRequest(string addingId, string addedId) {
     using var ctx = new ChattyBoxContext();
@@ -25,8 +42,7 @@ public class UserDB {
 
   // Read
   async public Task<List<FriendsResponse>> GetAnUsersFriends(string userId) {
-    using var ctx = new ChattyBoxContext();
-    var user = await ctx.Users
+    var user = await _userManager.Users
       .Include(u => u.Friends).ThenInclude(f => f.Connection)
       .Include(u => u.IsFriendsWith).ThenInclude(f => f.Connection)
       .FirstAsync(u => u.Id == userId);
@@ -52,9 +68,8 @@ public class UserDB {
   }
 
   async public Task<List<User>> GetUsers(string userId, string userName) {
-    using var ctx = new ChattyBoxContext();
     // Ensuring the user doesn't somehow search for themselves by adding an ID filter
-    var users = await ctx.Users.Where(u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) && u.Id != userId).ToListAsync();
+    var users = await _userManager.Users.Where(u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) && u.Id != userId).ToListAsync();
     return users;
   }
 
@@ -64,9 +79,8 @@ public class UserDB {
     return requests;
   }
 
-  async public Task<User> GetSpecificUser(string userId) {
-    using var ctx = new ChattyBoxContext();
-    return await ctx.Users.FirstAsync(u => u.Id == userId);
+  async public Task<User?> GetSpecificUser(string userId) {
+    return await _userManager.FindByIdAsync(userId);
   }
 
   async public Task<UserNotificationSetting?> GetNotificationSettings(string userId) {
@@ -81,6 +95,21 @@ public class UserDB {
       await ctx.SaveChangesAsync();
     }
     return user.UserNotificationSetting;
+  }
+
+  async public Task<LoginAttemptsResponse> GetUserLoginAttempts(string userId, int page = 1) {
+    using var ctx = new ChattyBoxContext();
+    var attempts = await ctx.UserLoginAttempts
+      .Where(ul => ul.UserId == userId)
+      .OrderBy(ul => ul.AttemptedAt)
+      .Skip(15 * (page - 1))
+      .Take(15)
+      .ToListAsync();
+    var total = await ctx.UserLoginAttempts.Where(ul => ul.UserId == userId).CountAsync();
+    return new LoginAttemptsResponse {
+      UserLoginAttempts = attempts,
+      Count = total
+    };
   }
 
   // Update

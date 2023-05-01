@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using ChattyBox.Models;
 using ChattyBox.Context;
+using ChattyBox.Hubs;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using MaxMind.GeoIP2;
@@ -51,7 +52,25 @@ public class UserController : ControllerBase {
     return degrees * Math.PI / 180;
   }
 
-  async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, IPAddress ipAddress) {
+  async private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
+    using var ctx = new ChattyBoxContext();
+    var previousAttempts = await ctx.UserLoginAttempts.Where(l => l.UserId == userId).ToListAsync();
+    var suspiciousLocation = previousAttempts.Count() > 0 && previousAttempts
+      .Any(
+        l =>
+          l.Success &&
+          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 20000
+      );
+    return suspiciousLocation;
+  }
+
+  async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
+    IPAddress ipAddress;
+    if (HttpContext.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(HttpContext.Connection.RemoteIpAddress.ToString())) {
+      ipAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
+    } else {
+      ipAddress = HttpContext.Connection.RemoteIpAddress;
+    }
     var city = await _maxMindClient.CityAsync(ipAddress);
     var loginAttempt = new UserLoginAttempt {
       Id = Guid.NewGuid().ToString(),
@@ -90,24 +109,13 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
     var user = await _userManager.FindByEmailAsync(data.Email);
     if (user == null) return Unauthorized();
+
     try {
       // TODO: when ready for deployment, remove if statement
-      IPAddress ipAddress;
-      if (HttpContext.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(HttpContext.Connection.RemoteIpAddress.ToString())) {
-        ipAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
-      } else {
-        ipAddress = HttpContext.Connection.RemoteIpAddress;
-      }
-      var loginAttempt = await CreateLoginAttempt(user.Id, ipAddress);
 
-      using var ctx = new ChattyBoxContext();
-      var previousAttempts = await ctx.UserLoginAttempts.Where(l => l.UserId == user.Id).ToListAsync();
-      var suspiciousLocation = previousAttempts.Count() > 0 && previousAttempts
-        .Any(
-          l =>
-            l.Success &&
-            CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 20000
-        );
+      var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
+
+      var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
 
       if (suspiciousLocation) {
         var newLocationVerification = new Random().Next(100000, 999999).ToString();
@@ -115,15 +123,23 @@ public class UserController : ControllerBase {
         await _userManager.AddClaimAsync(user, newLocationVerificationClaim);
         loginAttempt.Success = false;
       } else {
+        // Check if 2FA is enabled and password is correct
         var signInSuccess = await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
+        Console.WriteLine($"success: {signInSuccess.Succeeded}, requires two factor: {signInSuccess.RequiresTwoFactor}, is remembered: {await _signInManager.IsTwoFactorClientRememberedAsync(user)}");
+
+        if (signInSuccess.RequiresTwoFactor) {
+          // If enabled, but no code is given, return status 400
+          if (data.MFACode == null || String.IsNullOrEmpty(data.MFACode)) return BadRequest();
+          signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
+        }
         loginAttempt.Success = signInSuccess.Succeeded;
       }
-
+      using var ctx = new ChattyBoxContext();
       await ctx.UserLoginAttempts.AddAsync(loginAttempt);
       await ctx.SaveChangesAsync();
       if (!loginAttempt.Success) {
         await _userManager.AccessFailedAsync(user);
-        return Unauthorized();
+        return suspiciousLocation ? Forbid() : Unauthorized();
       };
       await _userManager.ResetAccessFailedCountAsync(user);
       await _userManager.UpdateSecurityStampAsync(user);
@@ -155,7 +171,6 @@ public class UserController : ControllerBase {
     });
   }
 
-  [Authorize]
   [HttpPost("Validate/2fa")]
   async public Task<IActionResult> ValidadeTwoFactorCode([FromBody] string code) {
     var userClaim = HttpContext.User;

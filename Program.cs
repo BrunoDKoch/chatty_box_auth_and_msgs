@@ -53,8 +53,8 @@ builder.Services.AddIdentity<User, Role>(options => {
 })
   .AddEntityFrameworkStores<ChattyBoxContext>()
   .AddRoles<Role>()
-  .AddTokenProvider<DataProtectorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
-  .AddTokenProvider<DataProtectorTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
+  .AddTokenProvider<AuthenticatorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
+  .AddTokenProvider<EmailTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
 
 builder.Services.AddAuthorization(options =>
   options.AddPolicy("TwoFactorEnabled", x => x.RequireClaim("amr", "mfa"))
@@ -113,8 +113,6 @@ app.UseRouting();
 app.UseAuthentication();
 
 app.UseAuthorization();
-
-//app.UseStaticFiles();
 
 app.UseImageSharp();
 

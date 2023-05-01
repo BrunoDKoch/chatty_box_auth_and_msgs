@@ -3,18 +3,39 @@ using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using ChattyBox.Database;
 using ChattyBox.Misc;
+using ChattyBox.Models;
+using Microsoft.AspNetCore.Identity;
 
 namespace ChattyBox.Hubs;
 
 public class MessagesHub : Hub {
   private List<string> _validLetters = ValidCharacters.GetLetters().Split().ToList();
+
+  private readonly UserManager<User> _userManager;
+  private readonly RoleManager<Role> _roleManager;
+  private readonly IConfiguration _configuration;
+  private readonly SignInManager<User> _signInManager;
+
   private MessagesDB _messagesDB = new MessagesDB();
-  private UserDB _userDB = new UserDB();
+  private UserDB _userDB;
+
+  public MessagesHub(
+      UserManager<User> userManager,
+      RoleManager<Role> roleManager,
+      IConfiguration configuration,
+      SignInManager<User> signInManager) {
+    _userManager = userManager;
+    _roleManager = roleManager;
+    _configuration = configuration;
+    _signInManager = signInManager;
+    _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
+  }
 
   async private Task HandleTyping(string fromId, string chatId, bool isTyping) {
     var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
     if (connections == null || connections.Count() == 0) return;
-    var from = await _userDB.GetSpecificUser(fromId);
+    var from = await _userManager.FindByIdAsync(fromId);
+    if (from == null) return;
     foreach (var connection in connections) {
       if (connection.UserId == fromId) continue;
       await Clients.Client(connection.ConnectionId).SendAsync("typing", new { from = from.UserName, isTyping }, default);
@@ -54,7 +75,8 @@ public class MessagesHub : Hub {
   async public Task GetCallerInfo() {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    var user = await _userDB.GetSpecificUser(userId);
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
     await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
   }
 
@@ -194,5 +216,48 @@ public class MessagesHub : Hub {
     if (userId == null) return;
     var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
     await Clients.Caller.SendAsync("notificationSettings", settings, default);
+  }
+
+  // Security
+  async public Task GetLoginAttempts(int page = 1) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var attempts = await _userDB.GetUserLoginAttempts(userId, page);
+    await Clients.Caller.SendAsync("loginAttempts", new { attempts = attempts.UserLoginAttempts, count = attempts.Count }, default);
+  }
+
+  async public Task GetMFASettings() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
+    var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
+    await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled, providers }, default);
+  }
+
+  async public Task SetMFASettings(bool enable) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
+    await _userManager.ResetAuthenticatorKeyAsync(user);
+    if (enable) {
+      var key = await _userManager.GetAuthenticatorKeyAsync(user);
+      var results = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+      if (results == null) return;
+      var token = $"otpauth://totp/ChattyBox:{user.Email}?secret={key}";
+      var recoveryCodes = results.Where(r => r != token).ToArray();
+      await Clients.Caller.SendAsync("mfaToken", new { token, recoveryCodes }, default);
+    }
+    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
+    await _userManager.SetTwoFactorEnabledAsync(user, enable);
+    Console.WriteLine($"2FA enabled: {await _userManager.GetTwoFactorEnabledAsync(user)}");
+    await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
+  }
+
+  async public Task InvokeMFA(string userId) {
+    var connection = await _messagesDB.GetClientConnection(userId);
+    await Clients.Client(connection.ConnectionId).SendAsync("showMFACodeModal", default);
   }
 }

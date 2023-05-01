@@ -20,7 +20,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public virtual DbSet<ClientConnection> ClientConnections { get; set; } = null!;
 
   public virtual DbSet<Chat> Chats { get; set; } = null!;
-  public virtual DbSet<ChatNotificationSetting> ChatNotificationSettings { get; set; }
+  public virtual DbSet<ChatNotificationSetting> ChatNotificationSettings { get; set; } = null!;
 
   public virtual DbSet<ChatToUser> ChatToUsers { get; set; } = null!;
 
@@ -42,7 +42,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<UserLoginAttempt> UserLoginAttempts { get; set; } = null!;
 
-  public virtual DbSet<UserNotificationSetting> UserNotificationSettings { get; set; }
+  public virtual DbSet<UserNotificationSetting> UserNotificationSettings { get; set; } = null!;
 
   public override DbSet<UserRole> UserRoles { get; set; } = null!;
 
