@@ -130,10 +130,13 @@ public class MessagesDB {
     return chatPreviews;
   }
 
-  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId) {
+  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId, int? skip) {
     using var ctx = new ChattyBoxContext();
     var messages = await ctx.Messages
-      .Where(m => m.ChatId == chatId)
+      .OrderByDescending(m => m.SentAt)
+      .Skip(skip ?? 0)
+      .Take(15)
+      .Where(m => m.ChatId ==chatId)
       .Include(m => m.From)
       .Include(m => m.Chat)
       .Include(m => m.ReadBy)
@@ -158,8 +161,8 @@ public class MessagesDB {
           ReadAt = r.ReadAt,
         }).ToList()
       })
-      .OrderBy(m => m.SentAt)
       .ToListAsync();
+    var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var completeChat = await ctx.Chats
       .Include(c => c.Users)
       .Select(c => new CompleteChatResponse {
@@ -174,6 +177,7 @@ public class MessagesDB {
         MaxUsers = c.MaxUsers,
         ChatName = c.ChatName,
         CreatedAt = c.CreatedAt,
+        MessageCount = messageCount,
       })
       .FirstAsync(c => c.Id == chatId);
 
@@ -235,7 +239,7 @@ public class MessagesDB {
 
   }
 
-  async public Task<List<string>> DeleteConnection(string userId) {
+  async public Task<List<string>?> DeleteConnection(string userId) {
     using var ctx = new ChattyBoxContext();
     var connection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
     ctx.Remove(connection);
@@ -248,7 +252,11 @@ public class MessagesDB {
         u.Chats.Any(c => c.Users.Any(cu => cu.Id == userId))
       )
       .ToListAsync();
-    var connections = userFriends.Select(u => u.Connection.ConnectionId);
-    return connections.ToList();
+    try {
+      var connections = userFriends.Select(u => u.Connection.ConnectionId);
+      return connections.ToList();
+    } catch (NullReferenceException) {
+      return null;
+    }
   }
 }

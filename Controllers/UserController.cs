@@ -66,6 +66,7 @@ public class UserController : ControllerBase {
 
   async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
     IPAddress ipAddress;
+    // TODO: when ready for deployment, remove if statement
     if (HttpContext.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(HttpContext.Connection.RemoteIpAddress.ToString())) {
       ipAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
     } else {
@@ -111,8 +112,6 @@ public class UserController : ControllerBase {
     if (user == null) return Unauthorized();
 
     try {
-      // TODO: when ready for deployment, remove if statement
-
       var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
 
       var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
@@ -123,14 +122,13 @@ public class UserController : ControllerBase {
         await _userManager.AddClaimAsync(user, newLocationVerificationClaim);
         loginAttempt.Success = false;
       } else {
-        // Check if 2FA is enabled and password is correct
         var signInSuccess = await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
-        Console.WriteLine($"success: {signInSuccess.Succeeded}, requires two factor: {signInSuccess.RequiresTwoFactor}, is remembered: {await _signInManager.IsTwoFactorClientRememberedAsync(user)}");
-
+        // Check if requires 2FA (will return false if device is remembered)
         if (signInSuccess.RequiresTwoFactor) {
-          // If enabled, but no code is given, return status 400
+          // If yes, but no code is given, return status 400
           if (data.MFACode == null || String.IsNullOrEmpty(data.MFACode)) return BadRequest();
           signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
+          await _userManager.ResetAccessFailedCountAsync(user);
         }
         loginAttempt.Success = signInSuccess.Succeeded;
       }

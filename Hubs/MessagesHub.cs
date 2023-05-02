@@ -66,8 +66,10 @@ public class MessagesHub : Hub {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var relevantConnections = await _messagesDB.DeleteConnection(userId);
-    foreach (var connection in relevantConnections) {
-      await Clients.Client(connection).SendAsync("updateStatus", userId, default);
+    if (relevantConnections != null) {
+      foreach (var connection in relevantConnections) {
+        await Clients.Client(connection).SendAsync("updateStatus", userId, default);
+      }
     }
     await base.OnDisconnectedAsync(exception);
   }
@@ -78,13 +80,6 @@ public class MessagesHub : Hub {
     var user = await _userManager.FindByIdAsync(userId);
     if (user == null) return;
     await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
-  }
-
-  async public Task GetChatMessages(string chatId) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var messages = await _messagesDB.GetMessagesFromChat(userId, chatId);
-    await Clients.Client(this.Context.ConnectionId).SendAsync("chatMessages", messages, default);
   }
 
   async public Task GetUnreadCount() {
@@ -196,10 +191,10 @@ public class MessagesHub : Hub {
   }
 
   // Fetching chat
-  async public Task GetChat(string chatId) {
+  async public Task GetChat(string chatId, int? skip) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    var chat = await _messagesDB.GetMessagesFromChat(userId, chatId);
+    var chat = await _messagesDB.GetMessagesFromChat(userId, chatId, skip);
     await Clients.Caller.SendAsync("chat", chat, default);
   }
 
@@ -252,7 +247,6 @@ public class MessagesHub : Hub {
     }
     var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
     await _userManager.SetTwoFactorEnabledAsync(user, enable);
-    Console.WriteLine($"2FA enabled: {await _userManager.GetTwoFactorEnabledAsync(user)}");
     await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
   }
 

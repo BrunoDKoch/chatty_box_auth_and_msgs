@@ -70,6 +70,7 @@ public class CompleteChatResponse {
   public DateTime CreatedAt { get; set; }
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+  public int MessageCount { get; set; }
 }
 
 public class ChatPreview {
