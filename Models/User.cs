@@ -20,6 +20,9 @@ public partial class User : IdentityUser {
   [Column("avatar")]
   public string? Avatar { get; set; }
 
+  [Column("privacyLevel")]
+  public int PrivacyLevel { get; set; } = 1;
+
   [InverseProperty("From")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 

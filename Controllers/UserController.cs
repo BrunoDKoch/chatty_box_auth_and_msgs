@@ -98,7 +98,6 @@ public class UserController : ControllerBase {
     }
     // TODO: Add email confirmation logic
     // For now, we'll just send the email confirmation code to the client
-    createdUser.TwoFactorEnabled = true;
     var otp = new Random().Next(100000, 999999).ToString();
     var otpClaim = new Claim("OTP", otp);
     await _userManager.AddClaimAsync(createdUser, otpClaim);
@@ -167,16 +166,6 @@ public class UserController : ControllerBase {
       email = user.Email,
       userName = user.UserName,
     });
-  }
-
-  [HttpPost("Validate/2fa")]
-  async public Task<IActionResult> ValidadeTwoFactorCode([FromBody] string code) {
-    var userClaim = HttpContext.User;
-    var user = await _userManager.GetUserAsync(userClaim);
-    if (user == null) return BadRequest("Usuário não logado");
-    var valid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, code);
-    if (!valid) return Unauthorized("Código inválido");
-    return Ok();
   }
 
   [HttpPost("Validate/Email")]

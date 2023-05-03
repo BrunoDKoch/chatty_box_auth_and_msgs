@@ -44,12 +44,6 @@ public class MessagePreview {
   public bool Read { get; set; }
 }
 
-public class FriendsResponse {
-  public string UserName { get; set; } = null!;
-  public string UserId { get; set; } = null!;
-  public bool IsOnline { get; set; }
-}
-
 public class ChatMessage {
   public string Id { get; set; } = null!;
   public string ChatId { get; set; } = null!;
@@ -85,6 +79,10 @@ public class UserPartialResponse {
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
+}
+
+public class FriendsResponse : UserPartialResponse {
+  public bool IsOnline { get; set; }
 }
 
 public class ReadMessagePartialResponse : UserPartialResponse {

@@ -50,7 +50,7 @@ public class MessagesHub : Hub {
       var friends = await _userDB.GetAnUsersFriends(id);
       await Clients.Caller.SendAsync("friends", friends, default);
       foreach (var friend in friends) {
-        var connection = await _messagesDB.GetClientConnection(friend.UserId);
+        var connection = await _messagesDB.GetClientConnection(friend.Id);
         if (connection == null) continue;
         await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
       }
@@ -184,7 +184,6 @@ public class MessagesHub : Hub {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
-    Console.WriteLine(chat.Id);
     foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
       await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
     }
@@ -250,8 +249,26 @@ public class MessagesHub : Hub {
     await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
   }
 
-  async public Task InvokeMFA(string userId) {
-    var connection = await _messagesDB.GetClientConnection(userId);
-    await Clients.Client(connection.ConnectionId).SendAsync("showMFACodeModal", default);
+  // Privacy
+  async public Task SetPrivacySettings(int privacyLevel) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
+    user.PrivacyLevel = privacyLevel;
+    await _userManager.UpdateAsync(user);
+    await Clients.Caller.SendAsync("privacyLevel", privacyLevel, default);
+  }
+
+  async public Task GetPrivacySettings() {
+     var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
+    if (user.PrivacyLevel == 0) {
+      user.PrivacyLevel = 1;
+      await _userManager.UpdateAsync(user);
+    }
+    await Clients.Caller.SendAsync("privacyLevel", user.PrivacyLevel, default);
   }
 }

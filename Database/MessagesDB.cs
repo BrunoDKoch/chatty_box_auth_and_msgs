@@ -77,18 +77,33 @@ public class MessagesDB {
     };
   }
 
-  async public Task<Chat> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
+  async public Task<CompleteChatResponse> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
     using var ctx = new ChattyBoxContext();
     var newChat = new Chat {
       Id = Guid.NewGuid().ToString(),
       ChatName = name,
       Users = await ctx.Users.Where(u => userIds.Contains(u.Id) || u.Id == mainUserId).ToListAsync(),
       Admins = new List<User> { await ctx.Users.FirstAsync(u => u.Id == mainUserId) },
-      MaxUsers = maxUsers ?? 99
+      MaxUsers = maxUsers ?? 99,
+      IsGroupChat = userIds.Count() > 1
     };
     await ctx.Chats.AddAsync(newChat);
     await ctx.SaveChangesAsync();
-    return newChat;
+    var chatResponse = new CompleteChatResponse {
+      Id = newChat.Id,
+      ChatName = name,
+      Users = newChat.Users.Select(u => new UserPartialResponse {
+        UserName = u.UserName!,
+        Avatar = u.Avatar,
+        Id = u.Id,
+      }).ToList(),
+      IsGroupChat = newChat.IsGroupChat,
+      CreatedAt = newChat.CreatedAt,
+      MaxUsers = newChat.MaxUsers,
+      Messages = new List<ChatMessage>(),
+      MessageCount = 0,
+    };
+    return chatResponse;
   }
 
   // Read

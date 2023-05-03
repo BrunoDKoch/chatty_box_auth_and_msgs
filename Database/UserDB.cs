@@ -53,23 +53,52 @@ public class UserDB {
       if (friend.Connection != null) {
         friends.Add(new FriendsResponse {
           UserName = friend.UserName!,
-          UserId = friend.Id,
-          IsOnline = true
+          Id = friend.Id,
+          IsOnline = true,
+          Avatar = friend.Avatar,
         });
       } else {
         friends.Add(new FriendsResponse {
           UserName = friend.UserName!,
-          UserId = friend.Id,
-          IsOnline = false
+          Id = friend.Id,
+          IsOnline = false,
+          Avatar = friend.Avatar,
         });
       }
     }
     return friends;
   }
 
-  async public Task<List<User>> GetUsers(string userId, string userName) {
+  async public Task<List<UserPartialResponse>> GetUsers(string userId, string userName) {
     // Ensuring the user doesn't somehow search for themselves by adding an ID filter
-    var users = await _userManager.Users.Where(u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) && u.Id != userId).ToListAsync();
+    var currentUser = await _userManager.FindByIdAsync(userId);
+    var users = await _userManager.Users
+      .Include(u => u.Connection)
+      .Include(u => u.Friends)
+      .Include(u => u.IsFriendsWith)
+      .Include(u => u.Chats)
+      .Where(
+        u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) &&
+        u.Id != userId && (
+          u.PrivacyLevel == 1 || (
+            u.PrivacyLevel == 2 && (
+              u.Chats.Any(c => c.Users.Contains(currentUser!)) ||
+              u.Friends.Contains(currentUser!) ||
+              u.IsFriendsWith.Contains(currentUser!)
+            )
+          ) || (
+            u.PrivacyLevel == 3 && (
+              u.Friends.Contains(currentUser!) || u.IsFriendsWith.Contains(currentUser!)
+            )
+          )
+        )
+      )
+      .Select(u => new UserPartialResponse {
+        Id = u.Id,
+        UserName = u.UserName!,
+        Avatar = u.Avatar
+      })
+      .ToListAsync();
     return users;
   }
 
