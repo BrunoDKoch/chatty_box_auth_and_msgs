@@ -145,13 +145,13 @@ public class MessagesDB {
     return chatPreviews;
   }
 
-  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId, int? skip) {
+  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId, int skip = 0) {
     using var ctx = new ChattyBoxContext();
     var messages = await ctx.Messages
+      .Where(m => m.ChatId == chatId)
       .OrderByDescending(m => m.SentAt)
-      .Skip(skip ?? 0)
+      .Skip(skip)
       .Take(15)
-      .Where(m => m.ChatId ==chatId)
       .Include(m => m.From)
       .Include(m => m.Chat)
       .Include(m => m.ReadBy)

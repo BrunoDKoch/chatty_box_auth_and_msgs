@@ -59,7 +59,7 @@ public class UserController : ControllerBase {
       .Any(
         l =>
           l.Success &&
-          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 20000
+          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 2000
       );
     return suspiciousLocation;
   }
@@ -157,6 +157,7 @@ public class UserController : ControllerBase {
     return SignOut();
   }
 
+  [Authorize]
   [HttpGet("Current")]
   async public Task<IActionResult> GetCurrentUser() {
     if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
@@ -198,7 +199,26 @@ public class UserController : ControllerBase {
     return Ok();
   }
 
+  [HttpPost("Recovery")]
+  async public Task<IActionResult> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
+    var user = await _userManager.FindByEmailAsync(request.Email);
+    if (user == null) return BadRequest("User not found");
+    // TODO: handle this via email
+    var token = _userManager.GeneratePasswordResetTokenAsync(user);
+    return Ok(token);
+  }
+
+  [HttpPut("Recovery")]
+  async public Task<IActionResult> RecoverPassword([FromBody] PasswordResetRequest request) {
+    var user = await _userManager.FindByEmailAsync(request.Email);
+    if (user == null) return BadRequest("User not found");
+    var result = await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
+    if (!result.Succeeded) return Unauthorized();
+    return Ok("Password reset");
+  }
+
   // Images
+  [Authorize]
   [HttpPost("Avatar")]
   async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
@@ -212,14 +232,5 @@ public class UserController : ControllerBase {
       Console.Error.WriteLine(e);
       return StatusCode(500);
     }
-  }
-
-  // Misc
-  [HttpGet("Friends")]
-  async public Task<IActionResult> GetFriends() {
-    if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    if (user == null) return Unauthorized();
-    return Ok(user.Friends);
   }
 }

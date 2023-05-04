@@ -100,3 +100,12 @@ public class LoginAttemptsResponse {
   public List<UserLoginAttempt> UserLoginAttempts = new List<UserLoginAttempt>();
   public int Count { get; set; }
 }
+
+public class PasswordRecoveryTokenRequest {
+  public string Email { get; set; } = null!;
+}
+
+public class PasswordResetRequest : PasswordRecoveryTokenRequest {
+  public string Token { get; set; } = null!;
+  public string Password { get; set; } = null!;
+}

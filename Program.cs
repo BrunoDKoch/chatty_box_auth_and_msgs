@@ -53,12 +53,11 @@ builder.Services.AddIdentity<User, Role>(options => {
 })
   .AddEntityFrameworkStores<ChattyBoxContext>()
   .AddRoles<Role>()
+  .AddDefaultTokenProviders()
   .AddTokenProvider<AuthenticatorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
   .AddTokenProvider<EmailTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
 
-builder.Services.AddAuthorization(options =>
-  options.AddPolicy("TwoFactorEnabled", x => x.RequireClaim("amr", "mfa"))
-);
+builder.Services.AddAuthorization();
 
 builder.Services.ConfigureApplicationCookie(options => {
   options.Cookie.HttpOnly = true;

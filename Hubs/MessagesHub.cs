@@ -38,7 +38,7 @@ public class MessagesHub : Hub {
     if (from == null) return;
     foreach (var connection in connections) {
       if (connection.UserId == fromId) continue;
-      await Clients.Client(connection.ConnectionId).SendAsync("typing", new { from = from.UserName, isTyping }, default);
+      await Clients.Client(connection.ConnectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
     }
   }
 
@@ -190,10 +190,13 @@ public class MessagesHub : Hub {
   }
 
   // Fetching chat
-  async public Task GetChat(string chatId, int? skip) {
+  async public Task GetChat(string chatId, int skip = 0) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var chat = await _messagesDB.GetMessagesFromChat(userId, chatId, skip);
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.WriteLine($"Messages: {chat.Messages.Count()}");
+    Console.ForegroundColor = ConsoleColor.White;
     await Clients.Caller.SendAsync("chat", chat, default);
   }
 
