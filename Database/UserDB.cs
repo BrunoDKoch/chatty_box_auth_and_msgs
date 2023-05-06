@@ -141,6 +141,23 @@ public class UserDB {
     };
   }
 
+  async public Task<UserDetailedResponse?> GetDetailedUserInfo(string requestingUserId, string userId) {
+    var user = await _userManager.Users
+      .Include(u => u.Friends)
+      .ThenInclude(f => f.Friends)
+      .Include(u => u.Friends)
+      .ThenInclude(f => f.IsFriendsWith)
+      .Include(u => u.IsFriendsWith)
+      .ThenInclude(f => f.Friends)
+      .Include(u => u.IsFriendsWith)
+      .ThenInclude(f => f.IsFriendsWith)
+      .Include(u => u.Blocking)
+      .Include(u => u.Chats)
+      .FirstAsync(u => u.Id == userId && !u.Blocking.Any(b => b.Id == requestingUserId));
+    if (user == null) return null;
+    return new UserDetailedResponse(user, requestingUserId);
+  }
+
   // Update
 
   async public Task HandleFriendRequest(string userId, string addingId, bool accepting) {
@@ -164,5 +181,15 @@ public class UserDB {
     settings.ShowOSNotification = showOSNotification;
     await ctx.SaveChangesAsync();
     return settings;
+  }
+
+  async public Task<bool?> ToggleUserBlocked(string mainUserId, string userBeingBlockedId) {
+    var mainUser = await _userManager.Users.Include(u => u.Blocking).FirstAsync(u => u.Id == mainUserId);
+    var userBeingBlocked = await _userManager.FindByIdAsync(userBeingBlockedId);
+    if (mainUser == null || userBeingBlocked == null) return null;
+    if (mainUser.Blocking.Contains(userBeingBlocked)) mainUser.Blocking.Remove(userBeingBlocked);
+    else mainUser.Blocking.Add(userBeingBlocked);
+    await _userManager.UpdateAsync(mainUser);
+    return mainUser.Blocking.Contains(userBeingBlocked);
   }
 }

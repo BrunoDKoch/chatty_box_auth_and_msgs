@@ -67,6 +67,16 @@ public class CompleteChatResponse {
   public int MessageCount { get; set; }
 }
 
+public class ChatBasicInfo {
+  public string Id { get; set; } = null!;
+  public string? ChatName { get; set; } = null!;
+  public DateTime CreatedAt { get; set; }
+  public ChatBasicInfo(Chat chat) {
+    Id = chat.Id;
+    CreatedAt = chat.CreatedAt;
+    ChatName = chat.ChatName;
+  }
+}
 public class ChatPreview {
   public string Id { get; set; } = null!;
   public string? ChatName { get; set; } = null!;
@@ -79,6 +89,44 @@ public class UserPartialResponse {
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
+}
+
+public class UserDetailedResponse : UserPartialResponse {
+  private List<UserPartialResponse> GetFriendsInCommon(User user, string requestingUserId) {
+    var list1 = user.Friends
+      .Where(
+        f => f.Friends
+          .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
+        )
+        .Select(f => new UserPartialResponse {
+          Id = f.Id,
+          Avatar = f.Avatar,
+          UserName = f.UserName!,
+        }).ToList();
+    var list2 = user.IsFriendsWith
+      .Where(
+        f => f.Friends
+          .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
+        )
+        .Select(f => new UserPartialResponse {
+          Id = f.Id,
+          Avatar = f.Avatar,
+          UserName = f.UserName!,
+        }).ToList();
+    return list1.Concat(list2).ToList();
+  }
+  public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
+  public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
+  public UserDetailedResponse(User user, string requestingUserId) {
+    Id = user.Id;
+    UserName = user.UserName!;
+    Avatar = user.Avatar;
+    FriendsInCommon = GetFriendsInCommon(user, requestingUserId);
+    ChatsInCommon = user.Chats
+      .Where(c => c.Users.Any(u => u.Id == requestingUserId))
+      .Select(c => new ChatBasicInfo(c))
+      .ToList();
+  }
 }
 
 public class FriendsResponse : UserPartialResponse {

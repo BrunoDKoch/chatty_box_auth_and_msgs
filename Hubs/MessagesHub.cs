@@ -179,6 +179,14 @@ public class MessagesHub : Hub {
     await _userDB.HandleFriendRequest(userId, addingId, accept);
   }
 
+  // User details
+  async public Task GetUserDetails(string userId) {
+    var requestingUserId = this.Context.UserIdentifier;
+    if (requestingUserId == null) return;
+    var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
+    await Clients.Caller.SendAsync("userDetails", details, default);
+  }
+
   // Chat creation
   async public Task CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
     var userId = this.Context.UserIdentifier;
@@ -261,7 +269,7 @@ public class MessagesHub : Hub {
   }
 
   async public Task GetPrivacySettings() {
-     var userId = this.Context.UserIdentifier;
+    var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var user = await _userManager.FindByIdAsync(userId);
     if (user == null) return;
@@ -270,5 +278,24 @@ public class MessagesHub : Hub {
       await _userManager.UpdateAsync(user);
     }
     await Clients.Caller.SendAsync("privacyLevel", user.PrivacyLevel, default);
+  }
+
+  // Blocking
+  async public Task ToggleBlock(string userToBlockId) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
+    await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
+  }
+
+  // Change username
+  async public Task ChangeUserName(string userName) {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var user = await _userManager.FindByIdAsync(userId);
+    if (user == null) return;
+    user.UserName = userName;
+    await _userManager.UpdateAsync(user);
+    await Clients.Caller.SendAsync("userName", user.UserName, default);
   }
 }
