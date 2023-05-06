@@ -194,9 +194,6 @@ public class MessagesHub : Hub {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     var chat = await _messagesDB.GetMessagesFromChat(userId, chatId, skip);
-    Console.ForegroundColor = ConsoleColor.Blue;
-    Console.WriteLine($"Messages: {chat.Messages.Count()}");
-    Console.ForegroundColor = ConsoleColor.White;
     await Clients.Caller.SendAsync("chat", chat, default);
   }
 

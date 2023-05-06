@@ -59,7 +59,7 @@ public class UserController : ControllerBase {
       .Any(
         l =>
           l.Success &&
-          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 2000
+          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
       );
     return suspiciousLocation;
   }

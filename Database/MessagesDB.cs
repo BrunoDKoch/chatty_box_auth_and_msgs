@@ -168,7 +168,7 @@ public class MessagesDB {
         EditedAt = m.EditedAt,
         Text = m.Text,
         ReplyToId = m.ReplyToId,
-        IsFromCaller = m.FromId == userId,
+        IsFromCaller = m.From.Id == userId,
         ReadBy = m.ReadBy.Select(r => new ReadMessagePartialResponse {
           UserName = r.ReadBy.UserName!,
           Id = r.ReadBy.Id,

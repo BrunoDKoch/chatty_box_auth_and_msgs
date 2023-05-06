@@ -47,7 +47,7 @@ builder.Services.AddDbContext<ChattyBoxContext>(options => {
 builder.Services.AddIdentity<User, Role>(options => {
   options.User.RequireUniqueEmail = true;
   options.User.AllowedUserNameCharacters = allowedLetters;
-  options.SignIn.RequireConfirmedEmail = false;
+  options.SignIn.RequireConfirmedEmail = true;
   options.Password.RequiredLength = 8;
   options.Lockout.MaxFailedAccessAttempts = 4;
 })
@@ -64,6 +64,7 @@ builder.Services.ConfigureApplicationCookie(options => {
   options.Cookie.SameSite = SameSiteMode.Lax;
   options.Cookie.Path = "/";
   options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+  options.SlidingExpiration = true;
   options.ExpireTimeSpan = TimeSpan.FromDays(14);
   options.LoginPath = "/User/Login";
   options.LogoutPath = "/User/Logout";
