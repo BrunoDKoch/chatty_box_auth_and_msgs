@@ -101,7 +101,6 @@ public class UserController : ControllerBase {
     var otp = new Random().Next(100000, 999999).ToString();
     var otpClaim = new Claim("OTP", otp);
     await _userManager.AddClaimAsync(createdUser, otpClaim);
-    await _signInManager.PasswordSignInAsync(createdUser, data.Password, false, false);
     return Ok(otp);
   }
 
@@ -171,16 +170,22 @@ public class UserController : ControllerBase {
 
   [HttpPost("Validate/Email")]
   async public Task<IActionResult> ValidateEmail([FromBody] EmailValidationRequest request) {
-    var userClaim = HttpContext.User;
-    var user = await _userManager.GetUserAsync(userClaim);
-    if (user == null) return BadRequest("User not found");
-    var claims = await _userManager.GetClaimsAsync(user);
-    var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
-    var valid = otpClaim != null && otpClaim.Value == request.Code;
-    if (!valid) return Unauthorized("Invalid code");
-    user.EmailConfirmed = true;
-    await _userManager.RemoveClaimAsync(user, user.UserClaims.First(u => u.ClaimType == "OTP").ToClaim());
-    return Ok();
+    try {
+      var user = await _userManager.FindByEmailAsync(request.Email);
+      if (user == null) return BadRequest("User not found");
+      var claims = await _userManager.GetClaimsAsync(user);
+      var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
+      var valid = otpClaim != null && otpClaim.Value == request.Code;
+      if (!valid) return Unauthorized("Invalid code");
+      user.EmailConfirmed = true;
+      await _userManager.RemoveClaimAsync(user, user.UserClaims.First(u => u.ClaimType == "OTP").ToClaim());
+      return Ok();
+    } catch (Exception e) {
+      Console.ForegroundColor = ConsoleColor.Red;
+      Console.Error.WriteLine(e);
+      Console.ForegroundColor = ConsoleColor.Green;
+      return StatusCode(500);
+    }
   }
 
   // Verify location after alert

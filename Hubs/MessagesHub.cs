@@ -16,7 +16,7 @@ public class MessagesHub : Hub {
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
 
-  private MessagesDB _messagesDB = new MessagesDB();
+  private MessagesDB _messagesDB;
   private UserDB _userDB;
 
   public MessagesHub(
@@ -29,6 +29,7 @@ public class MessagesHub : Hub {
     _configuration = configuration;
     _signInManager = signInManager;
     _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
+    _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
   async private Task HandleTyping(string fromId, string chatId, bool isTyping) {
@@ -203,6 +204,14 @@ public class MessagesHub : Hub {
     if (userId == null) return;
     var chat = await _messagesDB.GetMessagesFromChat(userId, chatId, skip);
     await Clients.Caller.SendAsync("chat", chat, default);
+  }
+
+  // Searching chat
+  async public Task SearchChat(string chatId, string? search, DateTime? startDate, DateTime? endDate, List<string> userIds, int skip) {
+    var mainUserId = this.Context.UserIdentifier;
+    if (mainUserId == null) return;
+    var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
+    await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
   }
 
   // User settings

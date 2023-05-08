@@ -30,6 +30,7 @@ public class LogInInfo {
 }
 
 public class EmailValidationRequest {
+  public string Email { get; set; } = null!;
   public string Code { get; set; } = null!;
 }
 
@@ -54,6 +55,31 @@ public class ChatMessage {
   public UserPartialResponse User { get; set; } = null!;
   public bool IsFromCaller { get; set; }
   public ICollection<ReadMessagePartialResponse> ReadBy { get; set; } = new List<ReadMessagePartialResponse>();
+  public ChatMessage(Message message, string mainUserId) {
+    Id = message.Id;
+    ChatId = message.ChatId;
+    Text = message.Text;
+    ReplyToId = message.ReplyToId;
+    SentAt = message.SentAt;
+    EditedAt = message.EditedAt;
+    IsFromCaller = message.FromId == mainUserId;
+    ReadBy = message.ReadBy.Select(r => new ReadMessagePartialResponse {
+      ReadAt = r.ReadAt,
+      UserName = r.ReadBy.UserName!,
+      Id = r.UserId,
+      Avatar = r.ReadBy.Avatar,
+    }).ToList();
+    User = new UserPartialResponse {
+      UserName = message.From.UserName!,
+      Avatar = message.From.Avatar,
+      Id = message.From.Id,
+    };
+  }
+}
+
+public class MessagesSearchResults {
+  public List<ChatMessage> Messages = new List<ChatMessage>();
+  public int MessageCount { get; set; }
 }
 
 public class CompleteChatResponse {

@@ -1,10 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Models;
 using ChattyBox.Context;
+using Microsoft.AspNetCore.Identity;
 
 namespace ChattyBox.Database;
 
 public class MessagesDB {
+
+  private readonly UserManager<User> _userManager;
+  private readonly RoleManager<Role> _roleManager;
+  private readonly IConfiguration _configuration;
+  private readonly SignInManager<User> _signInManager;
+
+  public MessagesDB(
+      UserManager<User> userManager,
+      RoleManager<Role> roleManager,
+      IConfiguration configuration,
+      SignInManager<User> signInManager) {
+    _userManager = userManager;
+    _roleManager = roleManager;
+    _configuration = configuration;
+    _signInManager = signInManager;
+  }
 
   async private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
     ctx.Messages.Remove(message);
@@ -54,27 +71,7 @@ public class MessagesDB {
     await ctx.Messages.AddAsync(newMessage);
     var user = await ctx.Users.FirstAsync(u => u.Id == fromId);
     await ctx.SaveChangesAsync();
-    return new ChatMessage {
-      Id = newMessage.Id,
-      ChatId = chatId,
-      Text = newMessage.Text,
-      ReplyToId = newMessage.ReplyToId,
-      SentAt = newMessage.SentAt,
-      EditedAt = newMessage.EditedAt,
-      IsFromCaller = false,
-      ReadBy = newMessage.ReadBy.Select(r => new ReadMessagePartialResponse {
-        ReadAt = r.ReadAt,
-        UserName = r.ReadBy.UserName!,
-        Id = r.UserId,
-        Avatar = r.ReadBy.Avatar,
-      })
-        .ToList(),
-      User = new UserPartialResponse {
-        UserName = user.UserName!,
-        Avatar = user.Avatar,
-        Id = user.Id,
-      },
-    };
+    return new ChatMessage(newMessage, fromId);
   }
 
   async public Task<CompleteChatResponse> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
@@ -119,7 +116,7 @@ public class MessagesDB {
       .ToListAsync();
     var chatPreviews = chats.Select(c => new ChatPreview {
       Id = c.Id,
-      Users = c.Users.Select(u => new UserPartialResponse{
+      Users = c.Users.Select(u => new UserPartialResponse {
         UserName = u.UserName!,
         Avatar = u.Avatar,
         Id = u.Id
@@ -156,26 +153,7 @@ public class MessagesDB {
       .Include(m => m.Chat)
       .Include(m => m.ReadBy)
       .ThenInclude(r => r.ReadBy)
-      .Select(m => new ChatMessage {
-        Id = m.Id,
-        User = new UserPartialResponse {
-          UserName = m.From.UserName!,
-          Id = m.FromId,
-          Avatar = m.From.Avatar,
-        },
-        ChatId = chatId,
-        SentAt = m.SentAt,
-        EditedAt = m.EditedAt,
-        Text = m.Text,
-        ReplyToId = m.ReplyToId,
-        IsFromCaller = m.From.Id == userId,
-        ReadBy = m.ReadBy.Select(r => new ReadMessagePartialResponse {
-          UserName = r.ReadBy.UserName!,
-          Id = r.ReadBy.Id,
-          Avatar = r.ReadBy.Avatar,
-          ReadAt = r.ReadAt,
-        }).ToList()
-      })
+      .Select(m => new ChatMessage(m, userId))
       .ToListAsync();
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var completeChat = await ctx.Chats
@@ -220,6 +198,39 @@ public class MessagesDB {
     } catch (InvalidOperationException) {
       return null;
     }
+  }
+
+  async public Task<MessagesSearchResults?> GetChatMessagesFromSearch(
+    string chatId,
+    string? search,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<string> userIds,
+    int skip,
+    string mainUserId
+    ) {
+    if ((search == null || String.IsNullOrEmpty(search)) && startDate == null && endDate == null && userIds.Count() <= 0) return null;
+    var mainUser = await _userManager.FindByIdAsync(mainUserId);
+    if (mainUser == null) return null;
+    using var ctx = new ChattyBoxContext();
+    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Messages).ThenInclude(m => m.From).FirstAsync(c => c.Id == chatId);
+    if (chat == null || !chat.Users.Any(u => u.Id == mainUserId)) return null;
+    var orderedMessages = chat.Messages.OrderByDescending(m => m.SentAt);
+
+    // Initialize preliminary results, append where clauses for each condition
+    IEnumerable<Message> preliminaryResults = orderedMessages;
+    if (search != null && !String.IsNullOrEmpty(search)) preliminaryResults = preliminaryResults.Where(m => m.Text.Contains(search));
+    if (startDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt >= startDate);
+    if (endDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt <= endDate);
+    if (userIds.Count() > 0) preliminaryResults = preliminaryResults.Where(m => userIds.Contains(m.FromId));
+
+    // Convert type and return
+    var searchResults = preliminaryResults.Skip(skip).Take(15).Select(m => new ChatMessage(m, mainUserId)).ToList();
+    
+    return new MessagesSearchResults {
+      Messages = searchResults,
+      MessageCount = preliminaryResults.Count()
+    };
   }
 
   // Update
