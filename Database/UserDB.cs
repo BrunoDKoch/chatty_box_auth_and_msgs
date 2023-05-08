@@ -23,7 +23,7 @@ public class UserDB {
     _signInManager = signInManager;
   }
   // Create
-  async public Task<FriendRequest?> CreateFriendRequest(string addingId, string addedId) {
+  async public Task<FriendRequestFiltered?> CreateFriendRequest(string addingId, string addedId) {
     using var ctx = new ChattyBoxContext();
     try {
       var friendRequest = new FriendRequest {
@@ -33,7 +33,9 @@ public class UserDB {
       };
       await ctx.FriendRequests.AddAsync(friendRequest);
       await ctx.SaveChangesAsync();
-      return friendRequest;
+      return new FriendRequestFiltered {
+        UserAdding = new UserPartialResponse(await _userManager.FindByIdAsync(addingId)!)
+      };
     } catch (Exception e) {
       Console.Error.Write(e);
       return null;
@@ -51,19 +53,9 @@ public class UserDB {
     userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();
     foreach (var friend in userFriends) {
       if (friend.Connection != null) {
-        friends.Add(new FriendsResponse {
-          UserName = friend.UserName!,
-          Id = friend.Id,
-          IsOnline = true,
-          Avatar = friend.Avatar,
-        });
+        friends.Add(new FriendsResponse(friend, true));
       } else {
-        friends.Add(new FriendsResponse {
-          UserName = friend.UserName!,
-          Id = friend.Id,
-          IsOnline = false,
-          Avatar = friend.Avatar,
-        });
+        friends.Add(new FriendsResponse(friend, false));
       }
     }
     return friends;
@@ -93,11 +85,7 @@ public class UserDB {
           )
         )
       )
-      .Select(u => new UserPartialResponse {
-        Id = u.Id,
-        UserName = u.UserName!,
-        Avatar = u.Avatar
-      })
+      .Select(u => new UserPartialResponse(u))
       .ToListAsync();
     return users;
   }
@@ -151,6 +139,8 @@ public class UserDB {
       .ThenInclude(f => f.Friends)
       .Include(u => u.IsFriendsWith)
       .ThenInclude(f => f.IsFriendsWith)
+      .Include(u => u.FriendRequestsSent)
+      .Include(u => u.FriendRequestsReceived)
       .Include(u => u.Blocking)
       .Include(u => u.Chats)
       .FirstAsync(u => u.Id == userId && !u.Blocking.Any(b => b.Id == requestingUserId));

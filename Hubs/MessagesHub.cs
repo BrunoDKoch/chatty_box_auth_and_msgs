@@ -155,7 +155,7 @@ public class MessagesHub : Hub {
   async public Task SendFriendRequest(string addedId) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    var friendRequest = _userDB.CreateFriendRequest(userId, addedId);
+    var friendRequest = await _userDB.CreateFriendRequest(userId, addedId);
     if (friendRequest == null) return;
     await Clients.Caller.SendAsync("added", friendRequest, default);
     var addedConnection = await _messagesDB.GetClientConnection(addedId);
@@ -178,6 +178,10 @@ public class MessagesHub : Hub {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
     await _userDB.HandleFriendRequest(userId, addingId, accept);
+    if (accept) {
+      var friends = await _userDB.GetAnUsersFriends(userId);
+      await Clients.Caller.SendAsync("friends", friends, default);
+    }
   }
 
   // User details
@@ -185,7 +189,15 @@ public class MessagesHub : Hub {
     var requestingUserId = this.Context.UserIdentifier;
     if (requestingUserId == null) return;
     var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
-    await Clients.Caller.SendAsync("userDetails", details, default);
+    if (details == null) return;
+    await Clients.Caller.SendAsync("userDetails", new {
+      friendsInCommon = details.FriendsInCommon,
+      chatsInCommon = details.ChatsInCommon,
+      id = details.Id,
+      avatar = details.Avatar,
+      userName = details.UserName
+    },
+    default);
   }
 
   // Chat creation
@@ -211,6 +223,7 @@ public class MessagesHub : Hub {
     var mainUserId = this.Context.UserIdentifier;
     if (mainUserId == null) return;
     var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
+    if (results == null) return;
     await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
   }
 

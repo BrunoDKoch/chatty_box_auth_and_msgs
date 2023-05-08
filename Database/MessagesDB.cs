@@ -89,11 +89,7 @@ public class MessagesDB {
     var chatResponse = new CompleteChatResponse {
       Id = newChat.Id,
       ChatName = name,
-      Users = newChat.Users.Select(u => new UserPartialResponse {
-        UserName = u.UserName!,
-        Avatar = u.Avatar,
-        Id = u.Id,
-      }).ToList(),
+      Users = newChat.Users.Select(u => new UserPartialResponse(u)).ToList(),
       IsGroupChat = newChat.IsGroupChat,
       CreatedAt = newChat.CreatedAt,
       MaxUsers = newChat.MaxUsers,
@@ -116,21 +112,13 @@ public class MessagesDB {
       .ToListAsync();
     var chatPreviews = chats.Select(c => new ChatPreview {
       Id = c.Id,
-      Users = c.Users.Select(u => new UserPartialResponse {
-        UserName = u.UserName!,
-        Avatar = u.Avatar,
-        Id = u.Id
-      }).ToList(),
+      Users = c.Users.Select(u => new UserPartialResponse(u)).ToList(),
       CreatedAt = c.CreatedAt,
       LastMessage = c.Messages.Count() > 0 ?
         c.Messages
         .OrderByDescending(m => m.SentAt)
         .Select(m => new MessagePreview {
-          From = new UserPartialResponse {
-            Id = m.FromId,
-            UserName = m.From.UserName!,
-            Avatar = m.From.Avatar,
-          },
+          From = new UserPartialResponse(m.From),
           SentAt = m.SentAt,
           Text = m.Text,
           Read = m.ReadBy.Any(r => r.UserId == userId) || m.FromId == userId,
@@ -162,11 +150,7 @@ public class MessagesDB {
         Id = c.Id,
         IsGroupChat = c.IsGroupChat,
         Messages = messages,
-        Users = c.Users.Select(u => new UserPartialResponse {
-          UserName = u.UserName!,
-          Avatar = u.Avatar,
-          Id = u.Id,
-        }).ToList(),
+        Users = c.Users.Select(u => new UserPartialResponse(u)).ToList(),
         MaxUsers = c.MaxUsers,
         ChatName = c.ChatName,
         CreatedAt = c.CreatedAt,

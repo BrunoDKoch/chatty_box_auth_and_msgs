@@ -35,7 +35,6 @@ public class EmailValidationRequest {
 }
 
 public class LocationValidationRequest : EmailValidationRequest {
-  public string Email { get; set; } = null!;
 }
 
 public class MessagePreview {
@@ -63,17 +62,8 @@ public class ChatMessage {
     SentAt = message.SentAt;
     EditedAt = message.EditedAt;
     IsFromCaller = message.FromId == mainUserId;
-    ReadBy = message.ReadBy.Select(r => new ReadMessagePartialResponse {
-      ReadAt = r.ReadAt,
-      UserName = r.ReadBy.UserName!,
-      Id = r.UserId,
-      Avatar = r.ReadBy.Avatar,
-    }).ToList();
-    User = new UserPartialResponse {
-      UserName = message.From.UserName!,
-      Avatar = message.From.Avatar,
-      Id = message.From.Id,
-    };
+    ReadBy = message.ReadBy.Select(r => new ReadMessagePartialResponse(r.ReadBy, r.ReadAt)).ToList();
+    User = new UserPartialResponse(message.From);
   }
 }
 
@@ -112,6 +102,11 @@ public class ChatPreview {
 }
 
 public class UserPartialResponse {
+  public UserPartialResponse(User user) {
+    Id = user.Id;
+    UserName = user.UserName!;
+    Avatar = user.Avatar;
+  }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
@@ -124,29 +119,22 @@ public class UserDetailedResponse : UserPartialResponse {
         f => f.Friends
           .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse {
-          Id = f.Id,
-          Avatar = f.Avatar,
-          UserName = f.UserName!,
-        }).ToList();
+        .Select(f => new UserPartialResponse(f)).ToList();
     var list2 = user.IsFriendsWith
       .Where(
         f => f.Friends
           .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse {
-          Id = f.Id,
-          Avatar = f.Avatar,
-          UserName = f.UserName!,
-        }).ToList();
+        .Select(f => new UserPartialResponse(f)).ToList();
     return list1.Concat(list2).ToList();
   }
+  public bool FriendRequestPending;
   public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
   public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
-  public UserDetailedResponse(User user, string requestingUserId) {
-    Id = user.Id;
-    UserName = user.UserName!;
-    Avatar = user.Avatar;
+  public UserDetailedResponse(User user, string requestingUserId) : base(user) {
+    FriendRequestPending =
+      user.FriendRequestsSent.Any(fr => fr.UserBeingAddedId == user.Id) ||
+      user.FriendRequestsReceived.Any(fr => fr.UserAddingId == user.Id);
     FriendsInCommon = GetFriendsInCommon(user, requestingUserId);
     ChatsInCommon = user.Chats
       .Where(c => c.Users.Any(u => u.Id == requestingUserId))
@@ -156,10 +144,16 @@ public class UserDetailedResponse : UserPartialResponse {
 }
 
 public class FriendsResponse : UserPartialResponse {
+  public FriendsResponse(User user, bool isOnline) : base(user) {
+    IsOnline = isOnline;
+  }
   public bool IsOnline { get; set; }
 }
 
 public class ReadMessagePartialResponse : UserPartialResponse {
+  public ReadMessagePartialResponse(User user, DateTime readAt) : base(user) {
+    ReadAt = readAt;
+  }
   public DateTime ReadAt;
 }
 
@@ -182,4 +176,8 @@ public class PasswordRecoveryTokenRequest {
 public class PasswordResetRequest : PasswordRecoveryTokenRequest {
   public string Token { get; set; } = null!;
   public string Password { get; set; } = null!;
+}
+
+public class FriendRequestFiltered {
+  public UserPartialResponse UserAdding { get; set; } = null!;
 }
