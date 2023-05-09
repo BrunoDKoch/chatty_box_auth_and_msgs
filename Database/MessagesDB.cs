@@ -86,16 +86,7 @@ public class MessagesDB {
     };
     await ctx.Chats.AddAsync(newChat);
     await ctx.SaveChangesAsync();
-    var chatResponse = new CompleteChatResponse {
-      Id = newChat.Id,
-      ChatName = name,
-      Users = newChat.Users.Select(u => new UserPartialResponse(u)).ToList(),
-      IsGroupChat = newChat.IsGroupChat,
-      CreatedAt = newChat.CreatedAt,
-      MaxUsers = newChat.MaxUsers,
-      Messages = new List<ChatMessage>(),
-      MessageCount = 0,
-    };
+    var chatResponse = new CompleteChatResponse(newChat, new List<ChatMessage>(), 0);
     return chatResponse;
   }
 
@@ -130,7 +121,7 @@ public class MessagesDB {
     return chatPreviews;
   }
 
-  async public Task<CompleteChatResponse> GetMessagesFromChat(string userId, string chatId, int skip = 0) {
+  async public Task<CompleteChatResponse> GetChatDetails(string userId, string chatId, int skip = 0) {
     using var ctx = new ChattyBoxContext();
     var messages = await ctx.Messages
       .Where(m => m.ChatId == chatId)
@@ -138,27 +129,20 @@ public class MessagesDB {
       .Skip(skip)
       .Take(15)
       .Include(m => m.From)
-      .Include(m => m.Chat)
       .Include(m => m.ReadBy)
       .ThenInclude(r => r.ReadBy)
       .Select(m => new ChatMessage(m, userId))
       .ToListAsync();
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
-    var completeChat = await ctx.Chats
+    var chat = await ctx.Chats
       .Include(c => c.Users)
-      .Select(c => new CompleteChatResponse {
-        Id = c.Id,
-        IsGroupChat = c.IsGroupChat,
-        Messages = messages,
-        Users = c.Users.Select(u => new UserPartialResponse(u)).ToList(),
-        MaxUsers = c.MaxUsers,
-        ChatName = c.ChatName,
-        CreatedAt = c.CreatedAt,
-        MessageCount = messageCount,
-      })
+      .ThenInclude(u => u.Blocking)
+      .Include(c => c.Users)
+      .ThenInclude(u => u.BlockedBy)
+      .Include(c => c.Admins)
       .FirstAsync(c => c.Id == chatId);
 
-    return completeChat;
+    return new CompleteChatResponse(chat, messages, messageCount, userId);
   }
 
   async public Task<List<ClientConnection>> GetAllConnectionsToChat(string chatId) {

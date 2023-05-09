@@ -214,7 +214,7 @@ public class MessagesHub : Hub {
   async public Task GetChat(string chatId, int skip = 0) {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
-    var chat = await _messagesDB.GetMessagesFromChat(userId, chatId, skip);
+    var chat = await _messagesDB.GetChatDetails(userId, chatId, skip);
     await Clients.Caller.SendAsync("chat", chat, default);
   }
 

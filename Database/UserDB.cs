@@ -34,7 +34,7 @@ public class UserDB {
       await ctx.FriendRequests.AddAsync(friendRequest);
       await ctx.SaveChangesAsync();
       return new FriendRequestFiltered {
-        UserAdding = new UserPartialResponse(await _userManager.FindByIdAsync(addingId)!)
+        UserAdding = new UserPartialResponse((await _userManager.FindByIdAsync(addingId))!)
       };
     } catch (Exception e) {
       Console.Error.Write(e);
@@ -71,6 +71,7 @@ public class UserDB {
       .Include(u => u.Chats)
       .Where(
         u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) &&
+        !u.Blocking.Any(b => b.Id == userId) &&
         u.Id != userId && (
           u.PrivacyLevel == 1 || (
             u.PrivacyLevel == 2 && (

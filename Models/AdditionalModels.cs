@@ -80,7 +80,52 @@ public class CompleteChatResponse {
   public DateTime CreatedAt { get; set; }
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+  public ICollection<string> AdminIds { get; set; } = new List<string>();
   public int MessageCount { get; set; }
+  public CompleteChatResponse(Chat chat, string mainUserId) {
+    Id = chat.Id;
+    IsGroupChat = chat.IsGroupChat;
+    MaxUsers = chat.MaxUsers;
+    ChatName = chat.ChatName;
+    CreatedAt = chat.CreatedAt;
+    Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
+    Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
+    AdminIds = chat.Admins.Select(a => a.Id).ToList();
+    MessageCount = chat.Messages.Count();
+  }
+  public CompleteChatResponse(Chat chat, List<ChatMessage> messages) {
+    Id = chat.Id;
+    IsGroupChat = chat.IsGroupChat;
+    MaxUsers = chat.MaxUsers;
+    ChatName = chat.ChatName;
+    CreatedAt = chat.CreatedAt;
+    Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
+    Messages = messages;
+    AdminIds = chat.Admins.Select(a => a.Id).ToList();
+    MessageCount = chat.Messages.Count();
+  }
+  public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount) {
+    Id = chat.Id;
+    IsGroupChat = chat.IsGroupChat;
+    MaxUsers = chat.MaxUsers;
+    ChatName = chat.ChatName;
+    CreatedAt = chat.CreatedAt;
+    Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
+    Messages = messages;
+    AdminIds = chat.Admins.Select(a => a.Id).ToList();
+    MessageCount = messageCount;
+  }
+  public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount, string mainUserId) {
+    Id = chat.Id;
+    IsGroupChat = chat.IsGroupChat;
+    MaxUsers = chat.MaxUsers;
+    ChatName = chat.ChatName;
+    CreatedAt = chat.CreatedAt;
+    Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
+    Messages = messages;
+    AdminIds = chat.Admins.Select(a => a.Id).ToList();
+    MessageCount = messageCount;
+  }
 }
 
 public class ChatBasicInfo {
@@ -102,14 +147,25 @@ public class ChatPreview {
 }
 
 public class UserPartialResponse {
+  public UserPartialResponse(User user, string requestingUserId) {
+    Id = user.Id;
+    UserName = user.UserName!;
+    Avatar = user.Avatar;
+    IsBlocking = user.Blocking.Any(u => u.Id == requestingUserId);
+    IsBlocked = user.BlockedBy.Any(u => u.Id == requestingUserId);
+  }
   public UserPartialResponse(User user) {
     Id = user.Id;
     UserName = user.UserName!;
     Avatar = user.Avatar;
+    IsBlocked = false;
+    IsBlocking = false;
   }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
+  public bool IsBlocking { get; set; }
+  public bool IsBlocked { get; set; }
 }
 
 public class UserDetailedResponse : UserPartialResponse {
@@ -119,19 +175,19 @@ public class UserDetailedResponse : UserPartialResponse {
         f => f.Friends
           .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse(f)).ToList();
+        .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
     var list2 = user.IsFriendsWith
       .Where(
         f => f.Friends
           .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse(f)).ToList();
+        .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
     return list1.Concat(list2).ToList();
   }
   public bool FriendRequestPending;
   public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
   public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
-  public UserDetailedResponse(User user, string requestingUserId) : base(user) {
+  public UserDetailedResponse(User user, string requestingUserId) : base(user, requestingUserId) {
     FriendRequestPending =
       user.FriendRequestsSent.Any(fr => fr.UserBeingAddedId == user.Id) ||
       user.FriendRequestsReceived.Any(fr => fr.UserAddingId == user.Id);
