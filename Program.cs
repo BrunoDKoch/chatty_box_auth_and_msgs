@@ -74,7 +74,7 @@ builder.Services.AddCookiePolicy(options => {
   options.Secure = CookieSecurePolicy.Always;
   options.CheckConsentNeeded = o => false;
   options.HttpOnly = HttpOnlyPolicy.Always;
-  options.MinimumSameSitePolicy = SameSiteMode.None;
+  options.MinimumSameSitePolicy = SameSiteMode.Lax;
 });
 
 var provider = builder.Environment.ContentRootFileProvider;

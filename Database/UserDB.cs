@@ -134,17 +134,21 @@ public class UserDB {
     var user = await _userManager.Users
       .Include(u => u.Friends)
       .ThenInclude(f => f.Friends)
+
       .Include(u => u.Friends)
       .ThenInclude(f => f.IsFriendsWith)
+
       .Include(u => u.IsFriendsWith)
       .ThenInclude(f => f.Friends)
+
       .Include(u => u.IsFriendsWith)
       .ThenInclude(f => f.IsFriendsWith)
+      
       .Include(u => u.FriendRequestsSent)
       .Include(u => u.FriendRequestsReceived)
       .Include(u => u.Blocking)
       .Include(u => u.Chats)
-      .FirstAsync(u => u.Id == userId && !u.Blocking.Any(b => b.Id == requestingUserId));
+      .FirstAsync(u => u.Id == userId && (u.Blocking.Count() == 0 || !u.Blocking.Any(b => b.Id == requestingUserId)));
     if (user == null) return null;
     return new UserDetailedResponse(user, requestingUserId);
   }

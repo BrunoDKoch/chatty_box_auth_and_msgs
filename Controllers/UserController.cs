@@ -156,16 +156,9 @@ public class UserController : ControllerBase {
     return SignOut();
   }
 
-  [Authorize]
-  [HttpGet("Current")]
-  async public Task<IActionResult> GetCurrentUser() {
-    if (!_signInManager.IsSignedIn(HttpContext.User)) return Unauthorized();
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    if (user == null) return Unauthorized();
-    return Ok(new {
-      email = user.Email,
-      userName = user.UserName,
-    });
+  [HttpGet("LoggedIn")]
+  public IActionResult CheckIfLoggedIn() {
+    return Ok(_signInManager.IsSignedIn(HttpContext.User));
   }
 
   [HttpPost("Validate/Email")]
