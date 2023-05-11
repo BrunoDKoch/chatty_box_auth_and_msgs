@@ -53,12 +53,20 @@ public class UserDB {
     userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();
     foreach (var friend in userFriends) {
       if (friend.Connection != null) {
-        friends.Add(new FriendsResponse(friend, true));
+        friends.Add(new FriendsResponse(friend, true, userId));
       } else {
-        friends.Add(new FriendsResponse(friend, false));
+        friends.Add(new FriendsResponse(friend, false, userId));
       }
     }
     return friends;
+  }
+
+  async public Task<List<UserPartialResponse>> GetBlockedUsers(string userId) {
+    var user = await _userManager.Users
+      .Include(u => u.Blocking)
+      .FirstAsync(u => u.Id == userId);
+    if (user == null) return new List<UserPartialResponse>();
+    return user.Blocking.Select(b => new UserPartialResponse(b, userId)).ToList();
   }
 
   async public Task<List<UserPartialResponse>> GetUsers(string userId, string userName) {
@@ -133,22 +141,19 @@ public class UserDB {
   async public Task<UserDetailedResponse?> GetDetailedUserInfo(string requestingUserId, string userId) {
     var user = await _userManager.Users
       .Include(u => u.Friends)
-      .ThenInclude(f => f.Friends)
-
+        .ThenInclude(f => f.Friends)
       .Include(u => u.Friends)
-      .ThenInclude(f => f.IsFriendsWith)
-
+        .ThenInclude(f => f.IsFriendsWith)
       .Include(u => u.IsFriendsWith)
-      .ThenInclude(f => f.Friends)
-
+        .ThenInclude(f => f.Friends)
       .Include(u => u.IsFriendsWith)
-      .ThenInclude(f => f.IsFriendsWith)
-      
+        .ThenInclude(f => f.IsFriendsWith)
       .Include(u => u.FriendRequestsSent)
       .Include(u => u.FriendRequestsReceived)
       .Include(u => u.Blocking)
+      .Include(u => u.BlockedBy)
       .Include(u => u.Chats)
-      .FirstAsync(u => u.Id == userId && (u.Blocking.Count() == 0 || !u.Blocking.Any(b => b.Id == requestingUserId)));
+      .FirstOrDefaultAsync(u => u.Id == userId);
     if (user == null) return null;
     return new UserDetailedResponse(user, requestingUserId);
   }
@@ -179,12 +184,22 @@ public class UserDB {
   }
 
   async public Task<bool?> ToggleUserBlocked(string mainUserId, string userBeingBlockedId) {
-    var mainUser = await _userManager.Users.Include(u => u.Blocking).FirstAsync(u => u.Id == mainUserId);
-    var userBeingBlocked = await _userManager.FindByIdAsync(userBeingBlockedId);
+    var mainUser = await _userManager.Users
+      .Include(u => u.Blocking)
+      .Include(u => u.Friends)
+      .FirstAsync(u => u.Id == mainUserId);
+    var userBeingBlocked = await _userManager.Users.Include(u => u.Friends).FirstAsync(u => u.Id == userBeingBlockedId);
     if (mainUser == null || userBeingBlocked == null) return null;
     if (mainUser.Blocking.Contains(userBeingBlocked)) mainUser.Blocking.Remove(userBeingBlocked);
-    else mainUser.Blocking.Add(userBeingBlocked);
+    else {
+      mainUser.Blocking.Add(userBeingBlocked);
+      if (mainUser.Friends.Contains(userBeingBlocked))
+        mainUser.Friends.Remove(userBeingBlocked);
+      else if (userBeingBlocked.Friends.Contains(mainUser))
+        userBeingBlocked.Friends.Remove(mainUser);
+    };
     await _userManager.UpdateAsync(mainUser);
+    await _userManager.UpdateAsync(userBeingBlocked);
     return mainUser.Blocking.Contains(userBeingBlocked);
   }
 }

@@ -200,7 +200,7 @@ public class UserDetailedResponse : UserPartialResponse {
 }
 
 public class FriendsResponse : UserPartialResponse {
-  public FriendsResponse(User user, bool isOnline) : base(user) {
+  public FriendsResponse(User user, bool isOnline, string requestingUserId) : base(user, requestingUserId) {
     IsOnline = isOnline;
   }
   public bool IsOnline { get; set; }

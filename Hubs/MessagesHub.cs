@@ -75,6 +75,20 @@ public class MessagesHub : Hub {
     await base.OnDisconnectedAsync(exception);
   }
 
+  // Start up
+  async public Task InitialCall() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null || !_signInManager.IsSignedIn(this.Context.User)) {
+      await Clients.Caller.SendAsync("notConnected", default);
+      return;
+    }
+    await this.GetChatPreviews();
+    await this.GetFriends();
+    await this.GetFriendRequests();
+    await this.GetNotificationSettings();
+    await this.GetBlockedUsers();
+  }
+
   async public Task GetCallerInfo() {
     var userId = this.Context.UserIdentifier;
     if (userId == null) return;
@@ -136,6 +150,13 @@ public class MessagesHub : Hub {
     var messages = await _messagesDB.GetChatPreview(userId);
     await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
   }
+  // Blocked users
+  async public Task GetBlockedUsers() {
+    var userId = this.Context.UserIdentifier;
+    if (userId == null) return;
+    var blocked = await _userDB.GetBlockedUsers(userId);
+    await Clients.Caller.SendAsync("blockedUsers", blocked, default);
+  }
 
   // Friends logic
   async public Task GetFriends() {
@@ -190,14 +211,7 @@ public class MessagesHub : Hub {
     if (requestingUserId == null) return;
     var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
     if (details == null) return;
-    await Clients.Caller.SendAsync("userDetails", new {
-      friendsInCommon = details.FriendsInCommon,
-      chatsInCommon = details.ChatsInCommon,
-      id = details.Id,
-      avatar = details.Avatar,
-      userName = details.UserName
-    },
-    default);
+    await Clients.Caller.SendAsync("userDetails", details, default);
   }
 
   // Chat creation
