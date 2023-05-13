@@ -78,7 +78,7 @@ public class MessagesHub : Hub {
   // Start up
   async public Task InitialCall() {
     var userId = this.Context.UserIdentifier;
-    if (userId == null || !_signInManager.IsSignedIn(this.Context.User)) {
+    if (!_signInManager.IsSignedIn(this.Context.User)) {
       await Clients.Caller.SendAsync("notConnected", default);
       return;
     }

@@ -127,7 +127,7 @@ public class UserDB {
     using var ctx = new ChattyBoxContext();
     var attempts = await ctx.UserLoginAttempts
       .Where(ul => ul.UserId == userId)
-      .OrderBy(ul => ul.AttemptedAt)
+      .OrderByDescending(ul => ul.AttemptedAt)
       .Skip(15 * (page - 1))
       .Take(15)
       .ToListAsync();
