@@ -44,10 +44,10 @@ public class MessagesHub : Hub {
   }
 
   async public override Task OnConnectedAsync() {
-    var id = this.Context.UserIdentifier;
-    if (id == null) return;
-    var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
     try {
+      var id = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(id);
+      var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
       var friends = await _userDB.GetAnUsersFriends(id);
       await Clients.Caller.SendAsync("friends", friends, default);
       foreach (var friend in friends) {
@@ -55,6 +55,8 @@ public class MessagesHub : Hub {
         if (connection == null) continue;
         await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
       }
+    } catch (ArgumentNullException) {
+      return;
     } finally {
       await base.OnConnectedAsync();
     }
@@ -90,11 +92,15 @@ public class MessagesHub : Hub {
   }
 
   async public Task GetCallerInfo() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
+    try {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      ArgumentNullException.ThrowIfNull(user);
+      await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
+    } catch (ArgumentNullException) {
+      return;
+    }
   }
 
   async public Task GetUnreadCount() {

@@ -77,6 +77,7 @@ public class CompleteChatResponse {
   public bool IsGroupChat { get; set; }
   public int MaxUsers { get; set; }
   public string? ChatName { get; set; }
+  public bool UserIsAdmin { get; set; }
   public DateTime CreatedAt { get; set; }
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
@@ -88,6 +89,7 @@ public class CompleteChatResponse {
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
+    UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();

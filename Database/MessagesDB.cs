@@ -224,6 +224,29 @@ public class MessagesDB {
     return readMessage;
   }
 
+  async public Task<CompleteChatResponse?> RemoveUserFromChat(string userId, string requestingUserId, string chatId) {
+    var user = await _userManager.Users.Include(u => u.IsAdminIn).FirstAsync(u => u.Id == userId);
+    if (userId != requestingUserId || user.IsAdminIn.Any(a => a.Id == chatId)) return null;
+    using var ctx = new ChattyBoxContext();
+    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    chat.Users.Remove(user);
+    if (chat.Admins.Contains(user)) chat.Admins.Remove(user);
+    await ctx.SaveChangesAsync();
+    return new CompleteChatResponse(chat, requestingUserId);
+  }
+
+  async public Task<CompleteChatResponse?> AddUserToChat(string userId, string requestingUserId, string chatId) {
+    using var ctx = new ChattyBoxContext();
+    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    ArgumentNullException.ThrowIfNull(chat);
+    if (!chat.Admins.Any(a => a.Id == requestingUserId)) return null;
+    var user = await _userManager.FindByIdAsync(userId)!;
+    ArgumentNullException.ThrowIfNull(user);
+    chat.Users.Add(user);
+    await ctx.SaveChangesAsync();
+    return new CompleteChatResponse(chat, requestingUserId);
+  }
+
   // Delete
   async public Task DeleteMessage(string messageId, string chatId, string userId) {
     using var ctx = new ChattyBoxContext();
