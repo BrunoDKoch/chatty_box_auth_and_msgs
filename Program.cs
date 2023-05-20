@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using System.Text.Json.Serialization;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Text;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Context;
@@ -12,6 +13,9 @@ using MaxMind.GeoIP2;
 using SixLabors.ImageSharp.Web.DependencyInjection;
 using SixLabors.ImageSharp.Web.Providers;
 using SixLabors.ImageSharp.Web.Caching;
+using Microsoft.IdentityModel.Logging;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 
 var reqOrigin = "_reqOrigin";
 
@@ -59,6 +63,19 @@ builder.Services.AddIdentity<User, Role>(options => {
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => {
+  var tokenOptions = builder.Configuration.GetSection("JsonWebToken");
+  options.TokenValidationParameters = new TokenValidationParameters {
+    ValidateIssuer = true,
+    ValidateAudience = true,
+    ValidateLifetime = true,
+    ValidateIssuerSigningKey = true,
+    ValidIssuer = tokenOptions.GetValue<string>("Issuer"),
+    ValidAudience = tokenOptions.GetValue<string>("Audience"),
+    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
+  };
+});
+
 builder.Services.ConfigureApplicationCookie(options => {
   options.Cookie.HttpOnly = true;
   options.Cookie.SameSite = SameSiteMode.Lax;
@@ -100,6 +117,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment()) {
   app.UseSwagger();
   app.UseSwaggerUI();
+  IdentityModelEventSource.ShowPII = true;
 }
 
 app.UseHttpsRedirection();

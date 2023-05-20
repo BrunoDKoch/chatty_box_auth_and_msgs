@@ -79,11 +79,6 @@ public class MessagesHub : Hub {
 
   // Start up
   async public Task InitialCall() {
-    var userId = this.Context.UserIdentifier;
-    if (!_signInManager.IsSignedIn(this.Context.User)) {
-      await Clients.Caller.SendAsync("notConnected", default);
-      return;
-    }
     await this.GetChatPreviews();
     await this.GetFriends();
     await this.GetFriendRequests();

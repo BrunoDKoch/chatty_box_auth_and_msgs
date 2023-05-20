@@ -9,6 +9,8 @@ using MaxMind.GeoIP2;
 using System.Net;
 using ChattyBox.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace ChattyBox.Controllers;
 
@@ -62,6 +64,20 @@ public class UserController : ControllerBase {
           CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
       );
     return suspiciousLocation;
+  }
+
+  async private Task<JwtSecurityToken> CreateAccessToken(User user) {
+    await _userManager.UpdateSecurityStampAsync(user);
+    var jwtSection = _configuration.GetSection("JsonWebToken")!;
+    var key = jwtSection.GetValue<string>("Key")!;
+    var issuer = jwtSection.GetValue<string>("Issuer")!;
+    var audience = jwtSection.GetValue<string>("Audience")!;
+    var claims = new List<Claim>();
+    claims.Add(new Claim(JwtRegisteredClaimNames.GivenName, user.UserName!));
+    claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email!));
+    claims.Add(new Claim("securityStamp", user.SecurityStamp!));
+    var token = new JwtSecurityToken(issuer, audience, claims, expires: DateTime.UtcNow.AddMinutes(30));
+    return token;
   }
 
   async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
@@ -138,8 +154,13 @@ public class UserController : ControllerBase {
         return suspiciousLocation ? Forbid() : Unauthorized();
       };
       await _userManager.ResetAccessFailedCountAsync(user);
-      await _userManager.UpdateSecurityStampAsync(user);
-      return Ok();
+      var userClaims = await _userManager.GetClaimsAsync(user);
+      if (userClaims.Where(c => c.Type == "stampExpiry").Count() > 1) {
+        await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));
+        await _userManager.AddClaimAsync(user, new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString()));
+      }
+      var token = await CreateAccessToken(user);
+      return Ok(new { token = $"{token.EncodedHeader}.{token.EncodedPayload}.{token.RawEncryptedKey}" });
     } catch (Exception e) {
       Console.Error.WriteLine(e);
       return Unauthorized();
@@ -157,8 +178,29 @@ public class UserController : ControllerBase {
   }
 
   [HttpGet("LoggedIn")]
-  public IActionResult CheckIfLoggedIn() {
-    return Ok(_signInManager.IsSignedIn(HttpContext.User));
+  async public Task<IActionResult> CheckIfLoggedIn() {
+    try {
+      var bearer = HttpContext.Request.Headers.Authorization.ToString();
+      if (bearer == null || String.IsNullOrEmpty(bearer)) return Ok(false);
+      var jwt = bearer.Replace("Bearer ", "");
+      var token = new JwtSecurityToken(jwt);
+      var email = token.Claims.First(c => c.Type == JwtRegisteredClaimNames.Email);
+      var user = await _userManager.FindByEmailAsync(email.Value);
+      ArgumentNullException.ThrowIfNull(user);
+      ArgumentNullException.ThrowIfNull(token.Payload.Exp);
+      var userClaims = await _userManager.GetClaimsAsync(user);
+      var expiry = DateTimeOffset.FromUnixTimeMilliseconds((int)token.Payload.Exp);
+      var stampExpiry = DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value);
+      if (stampExpiry < DateTime.UtcNow) throw new InvalidOperationException();
+      if (expiry < DateTime.UtcNow)
+        token = await CreateAccessToken(user);
+      await _signInManager.SignInAsync(user, true);
+      return Ok(
+        new { token = $"{token.EncodedHeader}.{token.EncodedPayload}.{token.RawEncryptedKey}" }
+      );
+    } catch {
+      return Unauthorized();
+    }
   }
 
   [HttpPost("Validate/Email")]
