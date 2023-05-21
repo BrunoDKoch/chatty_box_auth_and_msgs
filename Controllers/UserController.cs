@@ -159,8 +159,8 @@ public class UserController : ControllerBase {
         await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));
         await _userManager.AddClaimAsync(user, new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString()));
       }
-      var token = await CreateAccessToken(user);
-      return Ok(new { token = $"{token.EncodedHeader}.{token.EncodedPayload}.{token.RawEncryptedKey}" });
+      var token = TokenService.EncodeToken(await CreateAccessToken(user));
+      return Ok(new { token });
     } catch (Exception e) {
       Console.Error.WriteLine(e);
       return Unauthorized();
@@ -183,20 +183,21 @@ public class UserController : ControllerBase {
       var bearer = HttpContext.Request.Headers.Authorization.ToString();
       if (bearer == null || String.IsNullOrEmpty(bearer)) return Ok(false);
       var jwt = bearer.Replace("Bearer ", "");
-      var token = new JwtSecurityToken(jwt);
-      var email = token.Claims.First(c => c.Type == JwtRegisteredClaimNames.Email);
+      var decodedJwt = TokenService.DecodeToken(jwt);
+      var email = decodedJwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.Email);
       var user = await _userManager.FindByEmailAsync(email.Value);
       ArgumentNullException.ThrowIfNull(user);
-      ArgumentNullException.ThrowIfNull(token.Payload.Exp);
+      ArgumentNullException.ThrowIfNull(decodedJwt.Payload.Exp);
       var userClaims = await _userManager.GetClaimsAsync(user);
-      var expiry = DateTimeOffset.FromUnixTimeMilliseconds((int)token.Payload.Exp);
+      var expiry = DateTimeOffset.FromUnixTimeMilliseconds((int)decodedJwt.Payload.Exp);
       var stampExpiry = DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value);
       if (stampExpiry < DateTime.UtcNow) throw new InvalidOperationException();
+      string token;
       if (expiry < DateTime.UtcNow)
-        token = await CreateAccessToken(user);
-      await _signInManager.SignInAsync(user, true);
+        token = TokenService.EncodeToken(await CreateAccessToken(user));
+      else token = jwt;
       return Ok(
-        new { token = $"{token.EncodedHeader}.{token.EncodedPayload}.{token.RawEncryptedKey}" }
+        new { token }
       );
     } catch {
       return Unauthorized();

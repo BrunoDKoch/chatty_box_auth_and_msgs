@@ -9,6 +9,7 @@ using ChattyBox.Context;
 using ChattyBox.Models;
 using ChattyBox.Hubs;
 using ChattyBox.Misc;
+using ChattyBox.Services;
 using MaxMind.GeoIP2;
 using SixLabors.ImageSharp.Web.DependencyInjection;
 using SixLabors.ImageSharp.Web.Providers;
@@ -16,6 +17,9 @@ using SixLabors.ImageSharp.Web.Caching;
 using Microsoft.IdentityModel.Logging;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.SignalR;
+using System.Net.Mime;
+using Microsoft.AspNetCore.Diagnostics;
 
 var reqOrigin = "_reqOrigin";
 
@@ -74,9 +78,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     ValidAudience = tokenOptions.GetValue<string>("Audience"),
     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
   };
+  options.Events = new JwtBearerEvents {
+    OnMessageReceived = context => {
+      Console.ForegroundColor = ConsoleColor.Magenta;
+      Console.WriteLine(context.Request.Path);
+      if (context.Request.Path.StartsWithSegments("/hub")) {
+        var accessToken = context.Request.Query["access_token"];
+        context.Token = accessToken;
+        var decodedToken = TokenService.DecodeToken(accessToken);
+        Console.WriteLine(context.Token);
+        Console.WriteLine(decodedToken);
+      }
+      return Task.CompletedTask;
+    }
+  };
 });
 
-builder.Services.ConfigureApplicationCookie(options => {
+/*builder.Services.ConfigureApplicationCookie(options => {
   options.Cookie.HttpOnly = true;
   options.Cookie.SameSite = SameSiteMode.Lax;
   options.Cookie.Path = "/";
@@ -85,7 +103,7 @@ builder.Services.ConfigureApplicationCookie(options => {
   options.ExpireTimeSpan = TimeSpan.FromDays(14);
   options.LoginPath = "/User/Login";
   options.LogoutPath = "/User/Logout";
-});
+});*/
 
 builder.Services.AddCookiePolicy(options => {
   options.Secure = CookieSecurePolicy.Always;
@@ -97,6 +115,7 @@ builder.Services.AddCookiePolicy(options => {
 var provider = builder.Environment.ContentRootFileProvider;
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+builder.Services.AddSingleton<IUserIdProvider, UserIdProvider>();
 
 builder.Services.AddImageSharp()
   .Configure<PhysicalFileSystemProviderOptions>(options => {
@@ -119,6 +138,20 @@ if (app.Environment.IsDevelopment()) {
   app.UseSwaggerUI();
   IdentityModelEventSource.ShowPII = true;
 }
+
+app.UseExceptionHandler(exceptionHandler => {
+  exceptionHandler.Run(async context => {
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    context.Response.ContentType = MediaTypeNames.Application.Json;
+    var ex = context.Features.Get<IExceptionHandlerPathFeature>();
+    if (ex != null)
+      await context.Response.WriteAsJsonAsync(new {
+        status = context.Response.StatusCode,
+        cause = "Internal server error",
+        message = ex.Error.Message 
+      });
+  });
+});
 
 app.UseHttpsRedirection();
 

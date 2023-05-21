@@ -5,6 +5,7 @@ using ChattyBox.Database;
 using ChattyBox.Misc;
 using ChattyBox.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ChattyBox.Hubs;
 
@@ -32,11 +33,41 @@ public class MessagesHub : Hub {
     _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
+  private void EnsureUserIdNotNull(string userId) {
+    if (string.IsNullOrEmpty(userId)) {
+      throw new ArgumentNullException(nameof(userId));
+    }
+  }
+
+  async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null) {
+    if (finalAction == null) {
+      try {
+        await action();
+      } catch (Exception e) {
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.Error.WriteLine(e);
+        Console.ForegroundColor = ConsoleColor.White;
+        throw;
+      }
+    } else {
+      try {
+        await action();
+      } catch (Exception e) {
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.Error.WriteLine(e);
+        Console.ForegroundColor = ConsoleColor.White;
+        throw;
+      } finally {
+        await finalAction();
+      }
+    }
+  }
+
   async private Task HandleTyping(string fromId, string chatId, bool isTyping) {
     var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
     if (connections == null || connections.Count() == 0) return;
     var from = await _userManager.FindByIdAsync(fromId);
-    if (from == null) return;
+    ArgumentNullException.ThrowIfNull(from);
     foreach (var connection in connections) {
       if (connection.UserId == fromId) continue;
       await Clients.Client(connection.ConnectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
@@ -44,22 +75,21 @@ public class MessagesHub : Hub {
   }
 
   async public override Task OnConnectedAsync() {
-    try {
-      var id = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(id);
-      var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
-      var friends = await _userDB.GetAnUsersFriends(id);
-      await Clients.Caller.SendAsync("friends", friends, default);
-      foreach (var friend in friends) {
-        var connection = await _messagesDB.GetClientConnection(friend.Id);
-        if (connection == null) continue;
-        await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
-      }
-    } catch (ArgumentNullException) {
-      return;
-    } finally {
-      await base.OnConnectedAsync();
-    }
+    await HandleException(
+      async () => {
+        var id = this.Context.UserIdentifier;
+        ArgumentNullException.ThrowIfNullOrEmpty(id);
+        var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
+        var friends = await _userDB.GetAnUsersFriends(id);
+        await Clients.Caller.SendAsync("friends", friends, default);
+        foreach (var friend in friends) {
+          var connection = await _messagesDB.GetClientConnection(friend.Id);
+          if (connection == null) continue;
+          await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
+        }
+      },
+      async () => await base.OnConnectedAsync()
+    );
   }
 
   async public override Task OnDisconnectedAsync(Exception? exception) {
@@ -67,7 +97,7 @@ public class MessagesHub : Hub {
       Console.Error.WriteLine(exception);
     }
     var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
+    ArgumentNullException.ThrowIfNullOrEmpty(userId);
     var relevantConnections = await _messagesDB.DeleteConnection(userId);
     if (relevantConnections != null) {
       foreach (var connection in relevantConnections) {
@@ -99,30 +129,36 @@ public class MessagesHub : Hub {
   }
 
   async public Task GetUnreadCount() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var count = await _messagesDB.CountUnreadMessages(userId);
-    await Clients.Client(this.Context.ConnectionId).SendAsync("unread", count, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var count = await _messagesDB.CountUnreadMessages(userId);
+      await Clients.Client(this.Context.ConnectionId).SendAsync("unread", count, default);
+    });
   }
 
   async public Task StartTyping(string chatId) {
-    var fromId = this.Context.UserIdentifier;
-    if (fromId == null) return;
-    await HandleTyping(fromId, chatId, true);
+    await HandleException(async () => {
+      var fromId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(fromId);
+      await HandleTyping(fromId, chatId, true);
+    });
   }
 
   async public Task StopTyping(string chatId) {
-    var fromId = this.Context.UserIdentifier;
-    if (fromId == null) return;
-    await HandleTyping(fromId, chatId, false);
+    await HandleException(async () => {
+      var fromId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(fromId);
+      await HandleTyping(fromId, chatId, false);
+    });
   }
 
   async public Task SendMessage(string chatId, string text, string? replyToId) {
     var fromId = this.Context.UserIdentifier;
-    if (fromId == null) return;
+    ArgumentNullException.ThrowIfNullOrEmpty(fromId);
     try {
       var message = await _messagesDB.CreateMessage(fromId, chatId, text, replyToId);
-      if (message == null) throw new Exception();
+      ArgumentNullException.ThrowIfNull(message);
       var connections = await _messagesDB.GetAllConnectionsToChat(chatId);
       foreach (var connection in connections) {
         if (connection.UserId == fromId) {
@@ -139,200 +175,256 @@ public class MessagesHub : Hub {
   }
 
   async public Task MarkAsRead(string id) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    await _messagesDB.MarkAsRead(id, userId);
-    await Clients.Client(this.Context.ConnectionId).SendAsync("read", id, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      await _messagesDB.MarkAsRead(id, userId);
+      await Clients.Client(this.Context.ConnectionId).SendAsync("read", id, default);
+    });
   }
 
   async public Task GetChatPreviews() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var messages = await _messagesDB.GetChatPreview(userId);
-    await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var messages = await _messagesDB.GetChatPreview(userId);
+      await Clients.Client(this.Context.ConnectionId).SendAsync("previews", messages, default);
+    });
   }
   // Blocked users
   async public Task GetBlockedUsers() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var blocked = await _userDB.GetBlockedUsers(userId);
-    await Clients.Caller.SendAsync("blockedUsers", blocked, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var blocked = await _userDB.GetBlockedUsers(userId);
+      await Clients.Caller.SendAsync("blockedUsers", blocked, default);
+    });
   }
 
   // Friends logic
   async public Task GetFriends() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var friends = await _userDB.GetAnUsersFriends(userId);
-    await Clients.Caller.SendAsync("friends", friends, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var friends = await _userDB.GetAnUsersFriends(userId);
+      await Clients.Caller.SendAsync("friends", friends, default);
+    });
   }
 
   async public Task SearchUser(string userName) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var results = await _userDB.GetUsers(userId, userName);
-    await Clients.Caller.SendAsync("searchResults", results, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var results = await _userDB.GetUsers(userId, userName);
+      await Clients.Caller.SendAsync("searchResults", results, default);
+    });
   }
 
   async public Task SendFriendRequest(string addedId) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var friendRequest = await _userDB.CreateFriendRequest(userId, addedId);
-    if (friendRequest == null) return;
-    await Clients.Caller.SendAsync("added", friendRequest, default);
-    var addedConnection = await _messagesDB.GetClientConnection(addedId);
-    if (addedConnection == null) return;
-    try {
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var friendRequest = await _userDB.CreateFriendRequest(userId, addedId);
+      if (friendRequest == null) return;
+      await Clients.Caller.SendAsync("added", friendRequest, default);
+      var addedConnection = await _messagesDB.GetClientConnection(addedId);
+      if (addedConnection == null) return;
       await Clients.Client(addedConnection.ConnectionId).SendAsync("newFriendRequest", friendRequest, default);
-    } catch {
-      return;
-    }
+    });
   }
 
   async public Task GetFriendRequests() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var requests = await _userDB.GetFriendRequests(userId);
-    await Clients.Caller.SendAsync("pendingRequests", requests, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var requests = await _userDB.GetFriendRequests(userId);
+      await Clients.Caller.SendAsync("pendingRequests", requests, default);
+    });
   }
 
   async public Task RespondToFriendRequest(string addingId, bool accept) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    await _userDB.HandleFriendRequest(userId, addingId, accept);
-    if (accept) {
-      var friends = await _userDB.GetAnUsersFriends(userId);
-      await Clients.Caller.SendAsync("friends", friends, default);
-    }
+    await HandleException(async () => {
+        var userId = this.Context.UserIdentifier;
+        ArgumentNullException.ThrowIfNullOrEmpty(userId);
+        await _userDB.HandleFriendRequest(userId, addingId, accept);
+        if (accept) {
+          var friends = await _userDB.GetAnUsersFriends(userId);
+          await Clients.Caller.SendAsync("friends", friends, default);
+        }
+    });
   }
 
   // User details
   async public Task GetUserDetails(string userId) {
-    var requestingUserId = this.Context.UserIdentifier;
-    if (requestingUserId == null) return;
-    var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
-    if (details == null) return;
-    await Clients.Caller.SendAsync("userDetails", details, default);
+    await HandleException(async () => {
+      var requestingUserId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
+      ArgumentNullException.ThrowIfNull(details);
+      await Clients.Caller.SendAsync("userDetails", details, default);
+    });
   }
 
   // Chat creation
   async public Task CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
-    foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
-      await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
-    }
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
+      foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
+        await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
+      }
+    });
   }
 
   // Fetching chat
   async public Task GetChat(string chatId, int skip = 0) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var chat = await _messagesDB.GetChatDetails(userId, chatId, skip);
-    await Clients.Caller.SendAsync("chat", chat, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var chat = await _messagesDB.GetChatDetails(userId, chatId, skip);
+      await Clients.Caller.SendAsync("chat", chat, default);
+    });
   }
 
   // Searching chat
   async public Task SearchChat(string chatId, string? search, DateTime? startDate, DateTime? endDate, List<string> userIds, int skip) {
-    var mainUserId = this.Context.UserIdentifier;
-    if (mainUserId == null) return;
-    var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
-    if (results == null) return;
-    await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
+    await HandleException(async () => {
+      var mainUserId = this.Context.UserIdentifier;
+      if (mainUserId == null) return;
+      var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
+      if (results == null) return;
+      await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
+    });
   }
 
   // User settings
   async public Task GetNotificationSettings() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var settings = await _userDB.GetNotificationSettings(userId);
-    await Clients.Caller.SendAsync("notificationSettings", settings, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var settings = await _userDB.GetNotificationSettings(userId);
+      await Clients.Caller.SendAsync("notificationSettings", settings, default);
+    });
   }
 
   async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
-    await Clients.Caller.SendAsync("notificationSettings", settings, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
+      await Clients.Caller.SendAsync("notificationSettings", settings, default);
+    });
   }
 
   // Security
   async public Task GetLoginAttempts(int page = 1) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var attempts = await _userDB.GetUserLoginAttempts(userId, page);
-    await Clients.Caller.SendAsync("loginAttempts", new { attempts = attempts.UserLoginAttempts, count = attempts.Count }, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var attempts = await _userDB.GetUserLoginAttempts(userId, page);
+      await Clients.Caller.SendAsync("loginAttempts", new { attempts = attempts.UserLoginAttempts, count = attempts.Count }, default);
+    });
   }
 
   async public Task GetMFASettings() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
-    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
-    await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled, providers }, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      if (user == null) return;
+      var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+      var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
+      await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled, providers }, default);
+    });
   }
 
   async public Task SetMFASettings(bool enable) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    await _userManager.ResetAuthenticatorKeyAsync(user);
-    if (enable) {
-      var key = await _userManager.GetAuthenticatorKeyAsync(user);
-      var results = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-      if (results == null) return;
-      var token = $"otpauth://totp/ChattyBox:{user.Email}?secret={key}";
-      var recoveryCodes = results.Where(r => r != token).ToArray();
-      await Clients.Caller.SendAsync("mfaToken", new { token, recoveryCodes }, default);
-    }
-    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
-    await _userManager.SetTwoFactorEnabledAsync(user, enable);
-    await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      if (user == null) return;
+      await _userManager.ResetAuthenticatorKeyAsync(user);
+      if (enable) {
+        var key = await _userManager.GetAuthenticatorKeyAsync(user);
+        var results = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+        if (results == null) return;
+        var token = $"otpauth://totp/ChattyBox:{user.Email}?secret={key}";
+        var recoveryCodes = results.Where(r => r != token).ToArray();
+        await Clients.Caller.SendAsync("mfaToken", new { token, recoveryCodes }, default);
+      }
+      var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
+      await _userManager.SetTwoFactorEnabledAsync(user, enable);
+      await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
+    });
   }
 
   // Privacy
   async public Task SetPrivacySettings(int privacyLevel) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    user.PrivacyLevel = privacyLevel;
-    await _userManager.UpdateAsync(user);
-    await Clients.Caller.SendAsync("privacyLevel", privacyLevel, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      if (user == null) return;
+      user.PrivacyLevel = privacyLevel;
+      await _userManager.UpdateAsync(user);
+      await Clients.Caller.SendAsync("privacyLevel", privacyLevel, default);
+    });
   }
 
   async public Task GetPrivacySettings() {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    if (user.PrivacyLevel == 0) {
-      user.PrivacyLevel = 1;
-      await _userManager.UpdateAsync(user);
-    }
-    await Clients.Caller.SendAsync("privacyLevel", user.PrivacyLevel, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      if (user == null) return;
+      if (user.PrivacyLevel == 0) {
+        user.PrivacyLevel = 1;
+        await _userManager.UpdateAsync(user);
+      }
+      await Clients.Caller.SendAsync("privacyLevel", user.PrivacyLevel, default);
+    });
   }
 
   // Blocking
   async public Task ToggleBlock(string userToBlockId) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
-    await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
+      await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
+    });
   }
 
   // Change username
   async public Task ChangeUserName(string userName) {
-    var userId = this.Context.UserIdentifier;
-    if (userId == null) return;
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null) return;
-    user.UserName = userName;
-    await _userManager.UpdateAsync(user);
-    await Clients.Caller.SendAsync("userName", user.UserName, default);
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var user = await _userManager.FindByIdAsync(userId);
+      if (user == null) return;
+      user.UserName = userName;
+      await _userManager.UpdateAsync(user);
+      await Clients.Caller.SendAsync("userName", user.UserName, default);
+    });
+  }
+
+  // Add & remove users
+  async public Task AddUserToChat(string userId, string chatId) {
+    await HandleException(async () => {
+      var requestingUserId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var chat = await _messagesDB.AddUserToChat(userId, requestingUserId, chatId);
+      await Clients.Caller.SendAsync("chat", chat, default);
+    });
+  }
+  async public Task RemoveUserFromChat(string userId, string chatId) {
+    await HandleException(async () => {
+      var requestingUserId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var chat = await _messagesDB.RemoveUserFromChat(userId, requestingUserId, chatId);
+      await Clients.Caller.SendAsync("chat", chat, default);
+    });
   }
 }
