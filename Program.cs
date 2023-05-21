@@ -94,17 +94,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
   };
 });
 
-/*builder.Services.ConfigureApplicationCookie(options => {
-  options.Cookie.HttpOnly = true;
-  options.Cookie.SameSite = SameSiteMode.Lax;
-  options.Cookie.Path = "/";
-  options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-  options.SlidingExpiration = true;
-  options.ExpireTimeSpan = TimeSpan.FromDays(14);
-  options.LoginPath = "/User/Login";
-  options.LogoutPath = "/User/Logout";
-});*/
-
 builder.Services.AddCookiePolicy(options => {
   options.Secure = CookieSecurePolicy.Always;
   options.CheckConsentNeeded = o => false;
