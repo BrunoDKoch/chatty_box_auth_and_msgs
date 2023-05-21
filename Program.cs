@@ -78,20 +78,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     ValidAudience = tokenOptions.GetValue<string>("Audience"),
     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
   };
-  options.Events = new JwtBearerEvents {
-    OnMessageReceived = context => {
-      Console.ForegroundColor = ConsoleColor.Magenta;
-      Console.WriteLine(context.Request.Path);
-      if (context.Request.Path.StartsWithSegments("/hub")) {
-        var accessToken = context.Request.Query["access_token"];
-        context.Token = accessToken;
-        var decodedToken = TokenService.DecodeToken(accessToken);
-        Console.WriteLine(context.Token);
-        Console.WriteLine(decodedToken);
-      }
-      return Task.CompletedTask;
-    }
-  };
 });
 
 builder.Services.AddCookiePolicy(options => {
