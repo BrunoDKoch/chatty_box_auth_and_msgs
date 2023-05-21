@@ -10,9 +10,6 @@ namespace ChattyBox.Services;
 public class UserIdProvider : IUserIdProvider {
   public string GetUserId(HubConnectionContext connectionContext) {
     try {
-      foreach (var claim in connectionContext.User.Claims) {
-        Console.WriteLine(claim);
-      }
       var httpContext = connectionContext.GetHttpContext();
       ArgumentNullException.ThrowIfNull(httpContext);
       var accessToken = httpContext.Request.Query["access_token"];
