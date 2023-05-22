@@ -90,6 +90,19 @@ public class MessagesDB {
     return chatResponse;
   }
 
+  async public Task<SystemMessage> CreateSystemMessage(string instigatingUserId, string chatId, string eventType, string? affectedUserId = null) {
+    var newSystemMessage = new SystemMessage {
+      InstigatingUserId = instigatingUserId,
+      ChatId = chatId,
+      EventType = eventType,
+      AffectedUserId = affectedUserId,
+    };
+    using var ctx = new ChattyBoxContext();
+    await ctx.SystemMessages.AddAsync(newSystemMessage);
+    await ctx.SaveChangesAsync();
+    return await ctx.SystemMessages.Include(sm => sm.InstigatingUser).Include(sm => sm.AffectedUser).FirstAsync(sm => sm.Id == newSystemMessage.Id);
+  }
+
   // Read
   async public Task<List<ChatPreview>> GetChatPreview(string userId) {
     using var ctx = new ChattyBoxContext();
@@ -136,6 +149,10 @@ public class MessagesDB {
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var chat = await ctx.Chats
       .Include(c => c.Admins)
+      .Include(c => c.SystemMessages)
+        .ThenInclude(sm => sm.InstigatingUser)
+      .Include(c => c.SystemMessages)
+        .ThenInclude(sm => sm.AffectedUser)
       .Include(c => c.Users)
         .ThenInclude(u => u.Blocking)
       .Include(c => c.Users)
@@ -194,7 +211,7 @@ public class MessagesDB {
 
     // Convert type and return
     var searchResults = preliminaryResults.Skip(skip).Take(15).Select(m => new ChatMessage(m, mainUserId)).ToList();
-    
+
     return new MessagesSearchResults {
       Messages = searchResults,
       MessageCount = preliminaryResults.Count()
@@ -225,12 +242,14 @@ public class MessagesDB {
   }
 
   async public Task<CompleteChatResponse?> RemoveUserFromChat(string userId, string requestingUserId, string chatId) {
-    var user = await _userManager.Users.Include(u => u.IsAdminIn).FirstAsync(u => u.Id == userId);
-    if (userId != requestingUserId || user.IsAdminIn.Any(a => a.Id == chatId)) return null;
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    if (userId != requestingUserId && !chat.Admins.Any(a => a.Id == requestingUserId)) return null;
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
     chat.Users.Remove(user);
     if (chat.Admins.Contains(user)) chat.Admins.Remove(user);
+    ctx.Chats.Update(chat);
     await ctx.SaveChangesAsync();
     return new CompleteChatResponse(chat, requestingUserId);
   }
@@ -240,20 +259,34 @@ public class MessagesDB {
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
     if (!chat.Admins.Any(a => a.Id == requestingUserId)) return null;
-    var user = await _userManager.FindByIdAsync(userId)!;
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     chat.Users.Add(user);
+    ctx.Chats.Update(chat);
     await ctx.SaveChangesAsync();
     return new CompleteChatResponse(chat, requestingUserId);
   }
 
-  // Delete
-  async public Task DeleteMessage(string messageId, string chatId, string userId) {
+  async public Task LeaveChat(string userId, string chatId) {
     using var ctx = new ChattyBoxContext();
-    var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
-    if (userId == message.FromId) await HandleMessageDeletion(ctx, message);
-    var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
+    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    ArgumentNullException.ThrowIfNull(chat);
+    var user = await _userManager.FindByIdAsync(userId);
+    ArgumentNullException.ThrowIfNull(user);
+    chat.Users.Remove(user);
+    await ctx.SaveChangesAsync();
+  }
 
+  // Delete
+  async public Task<bool> DeleteMessage(string messageId, string chatId, string userId) {
+    using var ctx = new ChattyBoxContext();
+    var chat = await ctx.Chats.Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
+    if (userId != message.FromId && !chat.Admins.Any(a => a.Id == userId)) {
+      return false;
+    }
+    await HandleMessageDeletion(ctx, message);
+    return true;
   }
 
   async public Task<List<string>?> DeleteConnection(string userId) {

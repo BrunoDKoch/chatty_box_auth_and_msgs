@@ -30,6 +30,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<ReadMessage> ReadMessages { get; set; } = null!;
 
+  public virtual DbSet<SystemMessage> SystemMessages { get; set; }
+
   public override DbSet<Role> Roles { get; set; } = null!;
 
   public override DbSet<RoleClaim> RoleClaims { get; set; } = null!;
@@ -132,6 +134,24 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
         .OnDelete(DeleteBehavior.ClientSetNull)
         .IsRequired(false)
         .HasConstraintName("Message_replyToId_fkey");
+    });
+
+    modelBuilder.Entity<SystemMessage>(entity => {
+      entity.HasKey(e => e.Id).HasName("SystemMessage_pkey");
+
+      entity.Property(e => e.FiredAt).HasDefaultValueSql("(getdate())");
+
+      entity.HasOne(d => d.AffectedUser).WithMany(p => p.SystemMessagesAffectingUser)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("SystemMessage_affectedUserId_fkey");
+
+      entity.HasOne(d => d.Chat).WithMany(p => p.SystemMessages)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("SystemMessage_chatId_fkey");
+
+      entity.HasOne(d => d.InstigatingUser).WithMany(p => p.SystemMessageInstigatingUsers)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("SystemMessage_instigatingUserId_fkey");
     });
 
     modelBuilder.Entity<ReadMessage>(entity => {

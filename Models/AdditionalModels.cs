@@ -81,6 +81,7 @@ public class CompleteChatResponse {
   public DateTime CreatedAt { get; set; }
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+  public ICollection<SystemMessagePartial> SystemMessages { get; set; } = new List<SystemMessagePartial>();
   public ICollection<string> AdminIds { get; set; } = new List<string>();
   public int MessageCount { get; set; }
   public CompleteChatResponse(Chat chat, string mainUserId) {
@@ -92,6 +93,7 @@ public class CompleteChatResponse {
     UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
+    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = chat.Messages.Count();
   }
@@ -103,6 +105,7 @@ public class CompleteChatResponse {
     CreatedAt = chat.CreatedAt;
     Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
     Messages = messages;
+    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = chat.Messages.Count();
   }
@@ -114,6 +117,7 @@ public class CompleteChatResponse {
     CreatedAt = chat.CreatedAt;
     Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
     Messages = messages;
+    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = messageCount;
   }
@@ -126,6 +130,7 @@ public class CompleteChatResponse {
     UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = messages;
+    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = messageCount;
   }
@@ -239,4 +244,21 @@ public class PasswordResetRequest : PasswordRecoveryTokenRequest {
 
 public class FriendRequestFiltered {
   public UserPartialResponse UserAdding { get; set; } = null!;
+}
+
+public class SystemMessagePartial {
+  public string Id { get; set; } = null!;
+  public string ChatId { get; set; } = null!;
+  public DateTime FiredAt { get; set; }
+  public UserPartialResponse InstigatingUser { get; set; } = null!;
+  public string EventType { get; set; } = null!;
+  public UserPartialResponse? AffectedUser { get; set; } = null!;
+  public SystemMessagePartial(SystemMessage systemMessage) {
+    Id = systemMessage.Id;
+    ChatId = systemMessage.ChatId;
+    FiredAt = systemMessage.FiredAt;
+    InstigatingUser = new UserPartialResponse(systemMessage.InstigatingUser);
+    AffectedUser = systemMessage.AffectedUser != null ? new UserPartialResponse(systemMessage.AffectedUser) : null;
+    EventType = systemMessage.EventType;
+  }
 }

@@ -28,6 +28,9 @@ public partial class Chat {
   [InverseProperty("Chat")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 
+  [InverseProperty("Chat")]
+  public virtual ICollection<SystemMessage> SystemMessages { get; set; } = new List<SystemMessage>();
+
   [ForeignKey("A")]
   [InverseProperty("Chats")]
   public virtual ICollection<User> Users { get; set; } = new List<User>();

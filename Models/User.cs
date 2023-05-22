@@ -76,4 +76,10 @@ public partial class User : IdentityUser {
 
   [InverseProperty("User")]
   public virtual UserNotificationSetting? UserNotificationSetting { get; set; }
+
+  [InverseProperty("AffectedUser")]
+  public virtual ICollection<SystemMessage> SystemMessagesAffectingUser { get; set; } = new List<SystemMessage>();
+
+  [InverseProperty("InstigatingUser")]
+  public virtual ICollection<SystemMessage> SystemMessageInstigatingUsers { get; set; } = new List<SystemMessage>();
 }
