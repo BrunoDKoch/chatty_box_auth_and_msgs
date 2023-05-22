@@ -155,7 +155,14 @@ public class UserController : ControllerBase {
       };
       await _userManager.ResetAccessFailedCountAsync(user);
       var userClaims = await _userManager.GetClaimsAsync(user);
-      if (userClaims.Where(c => c.Type == "stampExpiry").Count() > 1) {
+      if (!userClaims.Any(c => c.Type == "stampExpiry")) {
+        var newClaim = new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString());
+        await _userManager.AddClaimAsync(user, newClaim);
+      }
+      if (
+        userClaims.Where(c => c.Type == "stampExpiry").Count() > 1 ||
+        DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value) < DateTime.UtcNow
+      ) {
         await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));
         await _userManager.AddClaimAsync(user, new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString()));
       }
@@ -199,7 +206,8 @@ public class UserController : ControllerBase {
       return Ok(
         new { token }
       );
-    } catch {
+    } catch (Exception e) {
+      Console.Error.WriteLine(e);
       return Unauthorized();
     }
   }

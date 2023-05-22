@@ -130,16 +130,16 @@ public class MessagesDB {
       .Take(15)
       .Include(m => m.From)
       .Include(m => m.ReadBy)
-      .ThenInclude(r => r.ReadBy)
+        .ThenInclude(r => r.ReadBy)
       .Select(m => new ChatMessage(m, userId))
       .ToListAsync();
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var chat = await ctx.Chats
-      .Include(c => c.Users)
-      .ThenInclude(u => u.Blocking)
-      .Include(c => c.Users)
-      .ThenInclude(u => u.BlockedBy)
       .Include(c => c.Admins)
+      .Include(c => c.Users)
+        .ThenInclude(u => u.Blocking)
+      .Include(c => c.Users)
+        .ThenInclude(u => u.BlockedBy)
       .FirstAsync(c => c.Id == chatId);
 
     return new CompleteChatResponse(chat, messages, messageCount, userId);

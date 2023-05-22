@@ -123,6 +123,7 @@ public class CompleteChatResponse {
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
+    UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = messages;
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
