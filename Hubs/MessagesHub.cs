@@ -47,7 +47,7 @@ public class MessagesHub : Hub {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        throw;
+        await Clients.Caller.SendAsync("error", e.Message, default);
       }
     } else {
       try {
@@ -56,7 +56,7 @@ public class MessagesHub : Hub {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        throw;
+        await Clients.Caller.SendAsync("error", e.Message, default);
       } finally {
         await finalAction();
       }
@@ -287,6 +287,16 @@ public class MessagesHub : Hub {
       var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
       if (results == null) return;
       await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
+    });
+  }
+
+  // Chat settings
+  async public Task UpdateChatNotificationSettings(string chatId, bool showOSNotification, bool playSound) {
+    await HandleException(async() => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var settings = await _messagesDB.UpdateChatNotificationSettings(userId, chatId, showOSNotification, playSound);
+      await Clients.Caller.SendAsync("chatNotificationSettings", settings, default);
     });
   }
 

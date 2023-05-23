@@ -72,7 +72,7 @@ public partial class User : IdentityUser {
   public virtual ICollection<FriendRequest> FriendRequestsReceived { get; set; } = new List<FriendRequest>();
 
   [InverseProperty("User")]
-  public virtual ChatNotificationSetting? ChatNotificationSetting { get; set; }
+  public virtual ICollection<ChatNotificationSetting> ChatNotificationSettings { get; set; } = new List<ChatNotificationSetting>();
 
   [InverseProperty("User")]
   public virtual UserNotificationSetting? UserNotificationSetting { get; set; }

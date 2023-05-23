@@ -111,26 +111,11 @@ public class MessagesDB {
         c => c.Users.Any(u => u.Id == userId)
       )
       .Include(c => c.Users)
+      .Include(c => c.ChatNotificationSettings)
       .Include(c => c.Messages)
-      .ThenInclude(m => m.ReadBy)
+        .ThenInclude(m => m.ReadBy)
       .ToListAsync();
-    var chatPreviews = chats.Select(c => new ChatPreview {
-      Id = c.Id,
-      Users = c.Users.Select(u => new UserPartialResponse(u)).ToList(),
-      CreatedAt = c.CreatedAt,
-      LastMessage = c.Messages.Count() > 0 ?
-        c.Messages
-        .OrderByDescending(m => m.SentAt)
-        .Select(m => new MessagePreview {
-          From = new UserPartialResponse(m.From),
-          SentAt = m.SentAt,
-          Text = m.Text,
-          Read = m.ReadBy.Any(r => r.UserId == userId) || m.FromId == userId,
-        })
-        .First()
-        : null,
-      ChatName = c.ChatName ?? null
-    }).ToList();
+    var chatPreviews = chats.Select(c => new ChatPreview(c, userId)).ToList();
     return chatPreviews;
   }
 
@@ -275,6 +260,22 @@ public class MessagesDB {
     ArgumentNullException.ThrowIfNull(user);
     chat.Users.Remove(user);
     await ctx.SaveChangesAsync();
+  }
+
+  async public Task<ChatNotificationSetting> UpdateChatNotificationSettings(string userId, string chatId, bool showOSNotification, bool playSound) {
+    using var ctx = new ChattyBoxContext();
+    var settings = await ctx.ChatNotificationSettings.FirstOrDefaultAsync(n => n.UserId == userId && n.ChatId == chatId);
+    if (settings == null) {
+      settings = new ChatNotificationSetting {
+        ChatId = chatId,
+        UserId = userId,
+      };
+      await ctx.ChatNotificationSettings.AddAsync(settings);
+    }
+    settings.ShowOSNotification = showOSNotification;
+    settings.PlaySound = playSound;
+    await ctx.SaveChangesAsync();
+    return settings;
   }
 
   // Delete

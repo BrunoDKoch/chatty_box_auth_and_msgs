@@ -40,5 +40,5 @@ public partial class Chat {
   public virtual ICollection<User> Admins { get; set; } = new List<User>();
 
   [InverseProperty("Chat")]
-  public virtual ChatNotificationSetting? ChatNotificationSetting { get; set; }
+  public virtual ICollection<ChatNotificationSetting> ChatNotificationSettings { get; set; } = new List<ChatNotificationSetting>();
 }

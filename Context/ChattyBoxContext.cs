@@ -94,11 +94,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.Property(e => e.PlaySound).HasDefaultValueSql("((1))");
       entity.Property(e => e.ShowOSNotification).HasDefaultValueSql("((1))");
 
-      entity.HasOne(d => d.Chat).WithOne(p => p.ChatNotificationSetting)
+      entity.HasOne(d => d.Chat).WithMany(p => p.ChatNotificationSettings)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("ChatNotificationSettings_chatId_fkey");
 
-      entity.HasOne(d => d.User).WithOne(p => p.ChatNotificationSetting)
+      entity.HasOne(d => d.User).WithMany(p => p.ChatNotificationSettings)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("ChatNotificationSettings_userId_fkey");
     });

@@ -28,10 +28,10 @@ public partial class ChatNotificationSetting {
   public bool? ShowOSNotification { get; set; }
 
   [ForeignKey("ChatId")]
-  [InverseProperty("ChatNotificationSetting")]
+  [InverseProperty("ChatNotificationSettings")]
   public virtual Chat Chat { get; set; } = null!;
 
   [ForeignKey("UserId")]
-  [InverseProperty("ChatNotificationSetting")]
+  [InverseProperty("ChatNotificationSettings")]
   public virtual User User { get; set; } = null!;
 }

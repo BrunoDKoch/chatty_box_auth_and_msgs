@@ -100,6 +100,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
+
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
@@ -112,6 +113,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
+
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
@@ -124,6 +126,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount, string mainUserId) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
+
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
@@ -152,6 +155,34 @@ public class ChatPreview {
   public MessagePreview? LastMessage { get; set; } = null!;
   public ICollection<UserPartialResponse> Users { get; set; } = null!;
   public DateTime CreatedAt { get; set; }
+  public bool? ShowOSNotification { get; set; }
+  public bool? PlaySound { get; set; }
+  public ChatPreview(Chat chat, string userId) {
+    Id = chat.Id;
+    ChatName = chat.ChatName;
+    LastMessage = chat.Messages.Any() ? chat.Messages
+      .OrderByDescending(m => m.SentAt)
+      .Select(m => new MessagePreview {
+        From = new UserPartialResponse(m.From),
+        SentAt = m.SentAt,
+        Text = m.Text,
+        Read = m.ReadBy.Any(r => r.UserId == userId) || m.FromId == userId,
+      })
+      .First()
+      : null;
+    Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
+    CreatedAt = chat.CreatedAt;
+    if (chat.ChatNotificationSettings != null && chat.ChatNotificationSettings.Any()) {
+      var chatNotificationSetting =
+        chat.ChatNotificationSettings.First(n => n.UserId == userId);
+      ShowOSNotification = chatNotificationSetting.ShowOSNotification;
+      PlaySound = chatNotificationSetting.PlaySound;
+    }
+    else {
+      ShowOSNotification = null;
+      PlaySound = null;
+    }
+  }
 }
 
 public class UserPartialResponse {
