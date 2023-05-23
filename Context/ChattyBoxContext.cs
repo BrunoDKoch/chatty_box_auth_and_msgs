@@ -30,7 +30,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<ReadMessage> ReadMessages { get; set; } = null!;
 
-  public virtual DbSet<SystemMessage> SystemMessages { get; set; }
+  public virtual DbSet<SystemMessage> SystemMessages { get; set; } = null!;
 
   public override DbSet<Role> Roles { get; set; } = null!;
 
