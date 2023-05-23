@@ -174,9 +174,9 @@ public class ChatPreview {
     CreatedAt = chat.CreatedAt;
     if (chat.ChatNotificationSettings != null && chat.ChatNotificationSettings.Any()) {
       var chatNotificationSetting =
-        chat.ChatNotificationSettings.First(n => n.UserId == userId);
-      ShowOSNotification = chatNotificationSetting.ShowOSNotification;
-      PlaySound = chatNotificationSetting.PlaySound;
+        chat.ChatNotificationSettings.FirstOrDefault(n => n.UserId == userId);
+      ShowOSNotification = chatNotificationSetting?.ShowOSNotification ?? null;
+      PlaySound = chatNotificationSetting?.PlaySound ?? null;
     }
     else {
       ShowOSNotification = null;

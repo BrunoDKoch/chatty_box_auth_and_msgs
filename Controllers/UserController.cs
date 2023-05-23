@@ -130,6 +130,8 @@ public class UserController : ControllerBase {
 
       var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
 
+      string failureReason = "invalid credentials";
+
       if (suspiciousLocation) {
         var newLocationVerification = new Random().Next(100000, 999999).ToString();
         var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
@@ -144,6 +146,11 @@ public class UserController : ControllerBase {
           signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
           await _userManager.ResetAccessFailedCountAsync(user);
         }
+        if (signInSuccess.IsLockedOut) {
+          if (user.LockoutEnd != DateTime.MaxValue)
+            failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
+          else failureReason = "account suspended indefinitely";
+        };
         loginAttempt.Success = signInSuccess.Succeeded;
       }
       using var ctx = new ChattyBoxContext();
@@ -151,7 +158,7 @@ public class UserController : ControllerBase {
       await ctx.SaveChangesAsync();
       if (!loginAttempt.Success) {
         await _userManager.AccessFailedAsync(user);
-        return suspiciousLocation ? Forbid() : Unauthorized();
+        return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
       };
       await _userManager.ResetAccessFailedCountAsync(user);
       var userClaims = await _userManager.GetClaimsAsync(user);
