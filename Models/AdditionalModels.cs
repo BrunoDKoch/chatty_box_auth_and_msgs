@@ -177,8 +177,7 @@ public class ChatPreview {
         chat.ChatNotificationSettings.FirstOrDefault(n => n.UserId == userId);
       ShowOSNotification = chatNotificationSetting?.ShowOSNotification ?? null;
       PlaySound = chatNotificationSetting?.PlaySound ?? null;
-    }
-    else {
+    } else {
       ShowOSNotification = null;
       PlaySound = null;
     }
@@ -297,4 +296,9 @@ public class SystemMessagePartial {
 public enum ExceptionActionType {
   MESSAGE,
   OTHER
+}
+
+public class MessageReadInformationResponse {
+  public ReadMessagePartialResponse ReadMessage { get; set; } = null!;
+  public string ConnectionId { get; set; } = null!;
 }

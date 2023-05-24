@@ -216,17 +216,26 @@ public class MessagesDB {
     return new ChatMessage(message, userId);
   }
 
-  async public Task<ReadMessage> MarkAsRead(string messageId, string userId) {
+  async public Task<MessageReadInformationResponse?> MarkAsRead(string messageId, string userId) {
     using var ctx = new ChattyBoxContext();
-    var message = await ctx.Messages.Include(m => m.ReadBy).FirstAsync(m => m.Id == messageId);
-    if (message.ReadBy.Any(r => r.UserId == userId)) return message.ReadBy.First(r => r.UserId == userId);
+    var message = await ctx.Messages
+      .Include(m => m.ReadBy)
+        .ThenInclude(r => r.ReadBy)
+      .Include(m => m.From)
+        .ThenInclude(f => f.Connection)
+      .FirstAsync(m => m.Id == messageId);
+    if (message.ReadBy.Any(r => r.ReadBy.Id == userId)) return null;
     var readMessage = new ReadMessage {
-      UserId = userId,
-      MessageId = messageId,
-    };
-    message.ReadBy.Add(readMessage);
+        UserId = userId,
+        MessageId = messageId,
+        ReadAt = DateTime.UtcNow,
+      };
+    await ctx.ReadMessages.AddAsync(readMessage);
     await ctx.SaveChangesAsync();
-    return readMessage;
+    return new MessageReadInformationResponse {
+      ReadMessage = new ReadMessagePartialResponse((await _userManager.FindByIdAsync(userId)!)!, readMessage.ReadAt),
+      ConnectionId = message.From.Connection.ConnectionId
+    };
   }
 
   async public Task<CompleteChatResponse?> RemoveUserFromChat(string userId, string requestingUserId, string chatId) {
