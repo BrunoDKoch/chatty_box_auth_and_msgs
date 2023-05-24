@@ -134,7 +134,7 @@ public class MessagesDB {
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var chat = await ctx.Chats
       .Include(c => c.Admins)
-      .Include(c => c.SystemMessages)
+      .Include(c => c.SystemMessages.Where(sm => messages.Any() && messages.Select(m => m.SentAt.Date).ToList().Contains(sm.FiredAt.Date)))
         .ThenInclude(sm => sm.InstigatingUser)
       .Include(c => c.SystemMessages)
         .ThenInclude(sm => sm.AffectedUser)
@@ -204,13 +204,16 @@ public class MessagesDB {
   }
 
   // Update
-  async public Task<Message> EditMessage(string messageId, string text) {
+  async public Task<ChatMessage> EditMessage(string userId, string messageId, string text) {
     using var ctx = new ChattyBoxContext();
-    var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
-    message.Text = text;
-    message.EditedAt = DateTime.UtcNow;
-    await ctx.SaveChangesAsync();
-    return message;
+    var message = await ctx.Messages.Include(m => m.From).FirstAsync(m => m.Id == messageId);
+    ArgumentNullException.ThrowIfNull(message);
+    if (message.FromId == userId && message.Text != text) {
+      message.Text = text;
+      message.EditedAt = DateTime.UtcNow;
+      await ctx.SaveChangesAsync();
+    }
+    return new ChatMessage(message, userId);
   }
 
   async public Task<ReadMessage> MarkAsRead(string messageId, string userId) {

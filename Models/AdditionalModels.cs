@@ -293,3 +293,8 @@ public class SystemMessagePartial {
     EventType = systemMessage.EventType;
   }
 }
+
+public enum ExceptionActionType {
+  MESSAGE,
+  OTHER
+}

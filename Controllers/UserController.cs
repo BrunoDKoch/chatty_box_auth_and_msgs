@@ -167,7 +167,8 @@ public class UserController : ControllerBase {
         await _userManager.AddClaimAsync(user, newClaim);
       }
       if (
-        userClaims.Where(c => c.Type == "stampExpiry").Count() > 1 ||
+        userClaims.Any() &&
+        userClaims.Any(c => c.Type == "stampExpiry") &&
         DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value) < DateTime.UtcNow
       ) {
         await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));

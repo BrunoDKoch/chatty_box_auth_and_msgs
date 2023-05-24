@@ -39,15 +39,16 @@ public class MessagesHub : Hub {
     }
   }
 
-  async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null) {
-    if (finalAction == null) {
+  async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null, ExceptionActionType actionType = ExceptionActionType.OTHER) {
+    string errorToSend = actionType == ExceptionActionType.MESSAGE ? "msgError" : "error";
+    if (finalAction is null) {
       try {
         await action();
       } catch (Exception e) {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        await Clients.Caller.SendAsync("error", e.Message, default);
+        await Clients.Caller.SendAsync(errorToSend, e.Message, default);
       }
     } else {
       try {
@@ -56,7 +57,7 @@ public class MessagesHub : Hub {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        await Clients.Caller.SendAsync("error", e.Message, default);
+        await Clients.Caller.SendAsync(errorToSend, e.Message, default);
       } finally {
         await finalAction();
       }
@@ -64,9 +65,11 @@ public class MessagesHub : Hub {
   }
 
   async private Task HandleTyping(string fromId, string chatId, string connectionId, bool isTyping) {
-    var from = await _userManager.FindByIdAsync(fromId);
-    ArgumentNullException.ThrowIfNull(from);
-    await Clients.GroupExcept(chatId, connectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
+    await HandleException(async () => {
+      var from = await _userManager.FindByIdAsync(fromId);
+      ArgumentNullException.ThrowIfNull(from);
+      await Clients.GroupExcept(chatId, connectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
+    });
   }
 
   async public override Task OnConnectedAsync() {
@@ -88,18 +91,21 @@ public class MessagesHub : Hub {
   }
 
   async public override Task OnDisconnectedAsync(Exception? exception) {
-    if (exception != null) {
-      Console.Error.WriteLine(exception);
-    }
-    var userId = this.Context.UserIdentifier;
-    ArgumentNullException.ThrowIfNullOrEmpty(userId);
-    var relevantConnections = await _messagesDB.DeleteConnection(userId);
-    if (relevantConnections != null) {
-      foreach (var connection in relevantConnections) {
-        await Clients.Client(connection).SendAsync("updateStatus", userId, default);
+    await HandleException(async () => {
+      if (exception != null) {
+        Console.Error.WriteLine(exception);
       }
-    }
-    await base.OnDisconnectedAsync(exception);
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var relevantConnections = await _messagesDB.DeleteConnection(userId);
+      if (relevantConnections != null) {
+        foreach (var connection in relevantConnections) {
+          await Clients.Client(connection).SendAsync("updateStatus", userId, default);
+        }
+      }
+    },
+      async () => await base.OnDisconnectedAsync(exception)
+    );
   }
 
   // Start up
@@ -132,6 +138,7 @@ public class MessagesHub : Hub {
     });
   }
 
+  // Handle messages
   async public Task StartTyping(string chatId) {
     await HandleException(async () => {
       var fromId = this.Context.UserIdentifier;
@@ -149,18 +156,18 @@ public class MessagesHub : Hub {
   }
 
   async public Task SendMessage(string chatId, string text, string? replyToId) {
-    var fromId = this.Context.UserIdentifier;
-    ArgumentNullException.ThrowIfNullOrEmpty(fromId);
-    try {
+    await HandleException(async () => {
+      var fromId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(fromId);
       var message = await _messagesDB.CreateMessage(fromId, chatId, text, replyToId);
       ArgumentNullException.ThrowIfNull(message);
       await Clients.Caller.SendAsync("newMessage", message, default);
       message.IsFromCaller = false;
       await Clients.GroupExcept(chatId, this.Context.ConnectionId).SendAsync("newMessage", message, default);
-    } catch (Exception e) {
-      Console.WriteLine(e);
-      await Clients.Caller.SendAsync("msgError", default);
-    }
+
+    },
+      actionType: ExceptionActionType.MESSAGE
+    );
   }
 
   async public Task MarkAsRead(string id) {
@@ -172,6 +179,16 @@ public class MessagesHub : Hub {
     });
   }
 
+  async public Task EditMessage(string messageId, string text) {
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var message = await _messagesDB.EditMessage(userId, messageId, text);
+      await Clients.Group(message.ChatId).SendAsync("editedMessage", message, default);
+    });
+  }
+
+  // Get previews
   async public Task GetChatPreviews() {
     await HandleException(async () => {
       var userId = this.Context.UserIdentifier;
@@ -292,7 +309,7 @@ public class MessagesHub : Hub {
 
   // Chat settings
   async public Task UpdateChatNotificationSettings(string chatId, bool showOSNotification, bool playSound) {
-    await HandleException(async() => {
+    await HandleException(async () => {
       var userId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(userId);
       var settings = await _messagesDB.UpdateChatNotificationSettings(userId, chatId, showOSNotification, playSound);
