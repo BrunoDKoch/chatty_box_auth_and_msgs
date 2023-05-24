@@ -83,8 +83,9 @@ public class MessagesHub : Hub {
         foreach (var friend in friends) {
           var connection = await _messagesDB.GetClientConnection(friend.Id);
           if (connection is null) continue;
-          await Clients.Client(connection.ConnectionId).SendAsync("updateStatus", id, default);
+          await Groups.AddToGroupAsync(connection.ConnectionId, $"{id}_friends", default);
         }
+        await Clients.Group($"{id}_friends").SendAsync("updateStatus", id, default);
       },
       async () => await base.OnConnectedAsync()
     );
@@ -98,11 +99,7 @@ public class MessagesHub : Hub {
       var userId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(userId);
       var relevantConnections = await _messagesDB.DeleteConnection(userId);
-      if (relevantConnections != null) {
-        foreach (var connection in relevantConnections) {
-          await Clients.Client(connection).SendAsync("updateStatus", userId, default);
-        }
-      }
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", userId, default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
