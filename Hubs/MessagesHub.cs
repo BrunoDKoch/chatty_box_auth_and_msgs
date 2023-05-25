@@ -186,6 +186,15 @@ public class MessagesHub : Hub {
     });
   }
 
+  async public Task GetSpecificMessage(string messageId) {
+    await HandleException(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var message = await _messagesDB.GetSpecificMessage(userId, messageId);
+      await Clients.Group(message.ChatId).SendAsync("specificMessage", message, default);
+    });
+  }
+
   // Get previews
   async public Task GetChatPreviews() {
     await HandleException(async () => {

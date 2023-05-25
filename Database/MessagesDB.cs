@@ -203,6 +203,13 @@ public class MessagesDB {
     };
   }
 
+  async public Task<ChatMessage> GetSpecificMessage(string userId, string messageId) {
+    using var ctx = new ChattyBoxContext();
+    var message = await ctx.Messages.Include(m => m.From).FirstAsync(m => m.Id == messageId);
+    ArgumentNullException.ThrowIfNull(message);
+    return new ChatMessage(message, userId);
+  }
+
   // Update
   async public Task<ChatMessage> EditMessage(string userId, string messageId, string text) {
     using var ctx = new ChattyBoxContext();
