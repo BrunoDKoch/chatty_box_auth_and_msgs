@@ -202,4 +202,16 @@ public class UserDB {
     await _userManager.UpdateAsync(userBeingBlocked);
     return mainUser.Blocking.Contains(userBeingBlocked);
   }
+
+  async public Task RemoveFriend(string userId, string friendId) {
+    var user = await _userManager.Users
+      .Include(u => u.Friends)
+      .Include(u => u.IsFriendsWith)
+      .FirstAsync(u => u.Id == userId);
+    var friend = await _userManager.FindByIdAsync(friendId);
+    ArgumentNullException.ThrowIfNull(friend);
+    user.Friends.Remove(friend);
+    user.IsFriendsWith.Remove(friend);
+    await _userManager.UpdateAsync(user);
+  }
 }

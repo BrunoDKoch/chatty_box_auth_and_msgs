@@ -258,14 +258,31 @@ public class MessagesDB {
     return new CompleteChatResponse(chat, requestingUserId);
   }
 
-  async public Task<CompleteChatResponse?> AddUserToChat(string userId, string requestingUserId, string chatId) {
+  async public Task<CompleteChatResponse> AddUserToChat(string userId, string requestingUserId, string chatId) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
-    if (!chat.Admins.Any(a => a.Id == requestingUserId)) return null;
+    if (!chat.Admins.Any(a => a.Id == requestingUserId))
+      throw new ArgumentException("User is not an admin");
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     chat.Users.Add(user);
+    ctx.Chats.Update(chat);
+    await ctx.SaveChangesAsync();
+    return new CompleteChatResponse(chat, requestingUserId);
+  }
+
+  async public Task<CompleteChatResponse> AddAdminToChat(string userId, string requestingUserId, string chatId) {
+    using var ctx = new ChattyBoxContext();
+    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    ArgumentNullException.ThrowIfNull(chat);
+    if (!chat.Admins.Any(a => a.Id == requestingUserId))
+      throw new ArgumentException("Must be an admin to add another admin");
+    if (chat.Admins.Any(a => a.Id == userId))
+      throw new ArgumentException("User is already an admin");
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
+    chat.Admins.Add(user);
     ctx.Chats.Update(chat);
     await ctx.SaveChangesAsync();
     return new CompleteChatResponse(chat, requestingUserId);
@@ -275,9 +292,17 @@ public class MessagesDB {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
-    var user = await _userManager.FindByIdAsync(userId);
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     chat.Users.Remove(user);
+    if (chat.Admins.Contains(user)) chat.Admins.Remove(user);
+
+    // I don't like this, but we need SOMEONE to be admin
+    if (chat.Admins.Count == 0) {
+      var random = new Random();
+      var randomUser = random.Next(chat.Users.Count);
+      chat.Admins.Add(chat.Users.ToList()[randomUser]);
+    }
     await ctx.SaveChangesAsync();
   }
 
