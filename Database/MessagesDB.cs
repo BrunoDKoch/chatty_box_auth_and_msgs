@@ -46,7 +46,7 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
     return clientConnection;
   }
-  async public Task<ChatMessage?> CreateMessage(string fromId, string chatId, string text, string? replyToId) {
+  async public Task<ChatMessage?> CreateMessage(string fromId, string chatId, string text, string? replyToId = null) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.FirstAsync(c => c.Id == chatId);
     if (chat == null) return null;

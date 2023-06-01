@@ -17,10 +17,24 @@ static public class ImageService {
     }
   }
 
-  static public async Task<string> SaveImage(IFormFile file, User user, IWebHostEnvironment webHostEnvironment) {
-    var fileName = $"{Guid.NewGuid().ToString()}{Path.GetExtension(file.FileName)}";
-    var imagesPath = Path.Combine(webHostEnvironment.ContentRootPath, "static", "images");
-    var savePath = Path.Combine(imagesPath, user.UserName!, "avatar");
+  static public async Task<string> SaveImage(IFormFile file, User user, IWebHostEnvironment webHostEnvironment, bool isAvatar = false) {
+    var name = isAvatar ? "avatar" : Guid.NewGuid().ToString();
+    var fileName = $"{name}{Path.GetExtension(file.FileName)}";
+    var imagesPath = Path.Combine("static", "images");
+    var savePath = Path.Combine(imagesPath, user.Id, "avatar");
+    if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
+    var filePath = Path.Combine(savePath, fileName);
+    using var image = await Image.LoadAsync(file.OpenReadStream());
+    using var stream = new FileStream(filePath, FileMode.Create);
+    await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
+    return filePath;
+  }
+
+  static public async Task<string> SaveImage(IFormFile file, User user, IWebHostEnvironment webHostEnvironment, string chatId) {
+    var name = Guid.NewGuid().ToString();
+    var fileName = $"{name}{Path.GetExtension(file.FileName)}";
+    var imagesPath = Path.Combine("static", "images");
+    var savePath = Path.Combine(imagesPath, chatId, user.Id, "avatar");
     if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
     var filePath = Path.Combine(savePath, fileName);
     using var image = await Image.LoadAsync(file.OpenReadStream());
@@ -37,5 +51,9 @@ static public class ImageService {
       Mode = ResizeMode.Max
     }));
     return image;
+  }
+
+  static public void DeleteImage(string filePath) {
+    File.Delete(filePath);
   }
 }

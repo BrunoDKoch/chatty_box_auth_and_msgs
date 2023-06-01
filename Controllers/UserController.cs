@@ -2,13 +2,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using ChattyBox.Models;
 using ChattyBox.Context;
+using ChattyBox.Services;
+using ChattyBox.Database;
 using ChattyBox.Hubs;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using MaxMind.GeoIP2;
 using System.Net;
-using ChattyBox.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.IdentityModel.Tokens.Jwt;
 
@@ -24,6 +26,7 @@ public class UserController : ControllerBase {
   private readonly SignInManager<User> _signInManager;
   private readonly WebServiceClient _maxMindClient;
   private readonly IWebHostEnvironment _webHostEnvironment;
+  private readonly IHubContext<MessagesHub> _hubContext;
 
   public UserController(
       UserManager<User> userManager,
@@ -31,13 +34,15 @@ public class UserController : ControllerBase {
       IConfiguration configuration,
       SignInManager<User> signInManager,
       WebServiceClient maxMindClient,
-      IWebHostEnvironment webHostEnvironment) {
+      IWebHostEnvironment webHostEnvironment,
+      IHubContext<MessagesHub> hubContext) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
+    _hubContext = hubContext;
   }
 
   private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -75,6 +80,8 @@ public class UserController : ControllerBase {
     var claims = new List<Claim>();
     claims.Add(new Claim(JwtRegisteredClaimNames.GivenName, user.UserName!));
     claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email!));
+    claims.Add(new Claim(JwtRegisteredClaimNames.NameId, user.Id));
+    claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
     claims.Add(new Claim("securityStamp", user.SecurityStamp!));
     var token = new JwtSecurityToken(issuer, audience, claims, expires: DateTime.UtcNow.AddMinutes(30));
     return token;
@@ -132,6 +139,7 @@ public class UserController : ControllerBase {
 
       string failureReason = "invalid credentials";
 
+      // Handle login attempt from suspicious location
       if (suspiciousLocation) {
         var newLocationVerification = new Random().Next(100000, 999999).ToString();
         var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
@@ -146,6 +154,7 @@ public class UserController : ControllerBase {
           signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
           await _userManager.ResetAccessFailedCountAsync(user);
         }
+        // Tell the user if their account is locked out
         if (signInSuccess.IsLockedOut) {
           if (user.LockoutEnd != DateTime.MaxValue)
             failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
@@ -195,18 +204,27 @@ public class UserController : ControllerBase {
   [HttpGet("LoggedIn")]
   async public Task<IActionResult> CheckIfLoggedIn() {
     try {
+      // Get the token
       var bearer = HttpContext.Request.Headers.Authorization.ToString();
       if (bearer == null || String.IsNullOrEmpty(bearer)) return Ok(false);
       var jwt = bearer.Replace("Bearer ", "");
       var decodedJwt = TokenService.DecodeToken(jwt);
-      var email = decodedJwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.Email);
-      var user = await _userManager.FindByEmailAsync(email.Value);
+
+      // Get user from id and check if user and expiry are ok
+      var id = decodedJwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.NameId);
+      var user = await _userManager.FindByIdAsync(id.Value);
       ArgumentNullException.ThrowIfNull(user);
       ArgumentNullException.ThrowIfNull(decodedJwt.Payload.Exp);
+
+      // Check token expiry and security stamp expiry
       var userClaims = await _userManager.GetClaimsAsync(user);
       var expiry = DateTimeOffset.FromUnixTimeMilliseconds((int)decodedJwt.Payload.Exp);
       var stampExpiry = DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value);
+
+      // Throw error if stamp is expired
       if (stampExpiry < DateTime.UtcNow) throw new InvalidOperationException();
+
+      // If the token itself is expired but stamp is fine, send new token
       string token;
       if (expiry < DateTime.UtcNow)
         token = TokenService.EncodeToken(await CreateAccessToken(user));
@@ -279,15 +297,34 @@ public class UserController : ControllerBase {
   [HttpPost("Avatar")]
   async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
-    if (user == null) return Unauthorized();
-    try {
-      var avatar = await ImageService.SaveImage(file, user, _webHostEnvironment);
-      user.Avatar = avatar;
-      await _userManager.UpdateAsync(user);
-      return Ok(avatar);
-    } catch (Exception e) {
-      Console.Error.WriteLine(e);
-      return StatusCode(500);
-    }
+    ArgumentNullException.ThrowIfNull(user);
+    var avatar = await ImageService.SaveImage(file, user, _webHostEnvironment, isAvatar: true);
+    user.Avatar = avatar;
+    await _userManager.UpdateAsync(user);
+    return Ok(avatar);
+  }
+
+  [Authorize]
+  [HttpDelete("Avatar")]
+  async public Task<IActionResult> DeleteAvatar() {
+    var user = await _userManager.GetUserAsync(HttpContext.User);
+    ArgumentNullException.ThrowIfNull(user);
+    ArgumentNullException.ThrowIfNullOrEmpty(user.Avatar);
+    ImageService.DeleteImage(user.Avatar);
+    user.Avatar = String.Empty;
+    await _userManager.UpdateAsync(user);
+    return Ok();
+  }
+
+  [Authorize]
+  [HttpPost("Upload/{chatId}")]
+  async public Task<IActionResult> UploadImage(string chatId, [FromForm] IFormFile file) {
+    var user = await _userManager.GetUserAsync(HttpContext.User);
+    ArgumentNullException.ThrowIfNull(user);
+    var image = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
+    var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
+    var message = await messagesDB.CreateMessage(user.Id, chatId, image);
+    await _hubContext.Clients.Group(chatId).SendAsync("newMessage", message, default);
+    return Ok(message);
   }
 }
