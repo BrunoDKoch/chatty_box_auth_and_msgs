@@ -183,17 +183,17 @@ public class MessagesDB {
     int skip,
     string mainUserId
     ) {
-    if ((search == null || String.IsNullOrEmpty(search)) && startDate == null && endDate == null && userIds.Count() <= 0) return null;
+    if (String.IsNullOrEmpty(search) && startDate is null && endDate is null && userIds.Count() <= 0) return null;
     var mainUser = await _userManager.FindByIdAsync(mainUserId);
-    if (mainUser == null) return null;
+    ArgumentNullException.ThrowIfNull(mainUser);
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Messages).ThenInclude(m => m.From).FirstAsync(c => c.Id == chatId);
-    if (chat == null || !chat.Users.Any(u => u.Id == mainUserId)) return null;
+    if (chat is null || !chat.Users.Any(u => u.Id == mainUserId)) return null;
     var orderedMessages = chat.Messages.OrderByDescending(m => m.SentAt);
 
     // Initialize preliminary results, append where clauses for each condition
     IEnumerable<Message> preliminaryResults = orderedMessages;
-    if (search != null && !String.IsNullOrEmpty(search)) preliminaryResults = preliminaryResults.Where(m => m.Text.Contains(search));
+    if (!String.IsNullOrEmpty(search)) preliminaryResults = preliminaryResults.Where(m => m.Text.ToLower().Contains(search.ToLower()));
     if (startDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt >= startDate);
     if (endDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt <= endDate);
     if (userIds.Count() > 0) preliminaryResults = preliminaryResults.Where(m => userIds.Contains(m.FromId));
