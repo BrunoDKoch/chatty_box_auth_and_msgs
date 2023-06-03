@@ -34,7 +34,7 @@ static public class ImageService {
     var name = Guid.NewGuid().ToString();
     var fileName = $"{name}{Path.GetExtension(file.FileName)}";
     var imagesPath = Path.Combine("static", "images");
-    var savePath = Path.Combine(imagesPath, chatId, user.Id, "avatar");
+    var savePath = Path.Combine(imagesPath, chatId, user.Id);
     if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
     var filePath = Path.Combine(savePath, fileName);
     using var image = await Image.LoadAsync(file.OpenReadStream());

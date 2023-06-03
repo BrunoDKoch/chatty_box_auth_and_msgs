@@ -68,6 +68,19 @@ public class MessagesHub : Hub {
     }
   }
 
+  async private Task<T?> HandleException<T>(Func<Task<T>> action) {
+    try {
+      var result = await action();
+      return result;
+    } catch (Exception e) {
+      Console.ForegroundColor = ConsoleColor.DarkRed;
+      Console.Error.WriteLine(e);
+      Console.ForegroundColor = ConsoleColor.White;
+      await Clients.Caller.SendAsync("error", e.Message, default);
+      return default(T);
+    }
+  }
+
   async private Task HandleTyping(string fromId, string chatId, string connectionId, bool isTyping) {
     await HandleException(async () => {
       var from = await _userManager.FindByIdAsync(fromId);
@@ -199,6 +212,15 @@ public class MessagesHub : Hub {
     });
   }
 
+  async public Task<bool> DeleteMessage(string messageId, string chatId) {
+    return await HandleException<bool>(async () => {
+      var userId = this.Context.UserIdentifier;
+      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      await _messagesDB.DeleteMessage(messageId, chatId, userId);
+      return true;
+    });
+  }
+
   // Get previews
   async public Task GetChatPreviews() {
     await HandleException(async () => {
@@ -266,16 +288,17 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var userId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(userId);
-      await _userDB.HandleFriendRequest(userId, addingId, accept);
+      var user = await _userManager.FindByIdAsync(addingId);
+      ArgumentNullException.ThrowIfNull(user);
+      var response = await _userDB.HandleFriendRequest(userId, addingId, accept);
       if (accept) {
         var connection = await _messagesDB.GetClientConnection(addingId);
         if (connection is not null) {
           await AddToFriendsGroup(userId, connection.ConnectionId);
-          var addingUserFriends = await _userDB.GetAnUsersFriends(addingId);
-          await Clients.Client(connection.ConnectionId).SendAsync("friends", addingUserFriends, default);
+          await AddToFriendsGroup(addingId, this.Context.ConnectionId);
+          await Clients.Client(connection.ConnectionId).SendAsync("newFriend", response, default);
         }
-        var friends = await _userDB.GetAnUsersFriends(userId);
-        await Clients.Caller.SendAsync("friends", friends, default);
+        await Clients.Caller.SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
       }
     });
   }
@@ -285,18 +308,25 @@ public class MessagesHub : Hub {
       var userId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(userId);
       await _userDB.RemoveFriend(userId, friendId);
+      var connection = await _messagesDB.GetClientConnection(friendId);
+      var clients = new List<string> { this.Context.ConnectionId };
+      if (connection is not null) clients.Add(connection.ConnectionId);
+      await Clients
+        .Clients(clients)
+        .SendAsync("removeFriend", new { userId, friendId });
     });
   }
 
   // User details
-  async public Task GetUserDetails(string userId) {
-    await HandleException(async () => {
+  async public Task<UserDetailedResponse?> GetUserDetails(string userId) {
+    var result = await HandleException<UserDetailedResponse>(async () => {
       var requestingUserId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNull(requestingUserId);
       var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
       ArgumentNullException.ThrowIfNull(details);
-      await Clients.Caller.SendAsync("userDetails", details, default);
+      return details;
     });
+    return result;
   }
 
   // Chat creation
@@ -432,16 +462,18 @@ public class MessagesHub : Hub {
   }
 
   // Blocking
-  async public Task ToggleBlock(string userToBlockId) {
-    await HandleException(async () => {
+  async public Task<UserDetailedResponse?> ToggleBlock(string userToBlockId) {
+    var result = await HandleException<UserDetailedResponse>(async () => {
       var userId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(userId);
       var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
       var blockedConnection = await _messagesDB.GetClientConnection(userToBlockId);
-      await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
-      if (blockedConnection is null) return;
-      await Clients.Client(blockedConnection.ConnectionId).SendAsync("blocked", new { id = userId, blocked }, default);
+      //await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
+      if (blockedConnection is not null)
+        await Clients.Client(blockedConnection.ConnectionId).SendAsync("blocked", new { id = userId, blocked }, default);
+      return blocked;
     });
+    return result;
   }
 
   // Change username

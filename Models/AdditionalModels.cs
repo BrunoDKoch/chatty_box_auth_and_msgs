@@ -207,29 +207,33 @@ public class UserPartialResponse {
 }
 
 public class UserDetailedResponse : UserPartialResponse {
+
   private List<UserPartialResponse> GetFriendsInCommon(User user, string requestingUserId) {
     var list1 = user.Friends
       .Where(
-        f => f.Friends
-          .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
+          f => f.Friends.Any(ff => ff.Id == requestingUserId) || 
+          f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
+      .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
     var list2 = user.IsFriendsWith
       .Where(
-        f => f.Friends
-          .Any(ff => ff.Id == requestingUserId) || f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
+          f => f.Friends.Any(ff => ff.Id == requestingUserId) || 
+          f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
-        .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
+      .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
     return list1.Concat(list2).ToList();
   }
   public bool FriendRequestPending;
+  public bool IsFriend;
   public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
   public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
+
   public UserDetailedResponse(User user, string requestingUserId) : base(user, requestingUserId) {
     FriendRequestPending =
-      user.FriendRequestsSent.Any(fr => fr.UserBeingAddedId == user.Id) ||
-      user.FriendRequestsReceived.Any(fr => fr.UserAddingId == user.Id);
-    FriendsInCommon = GetFriendsInCommon(user, requestingUserId);
+      user.FriendRequestsSent.Any(fr => fr.UserBeingAdded.Id == requestingUserId) ||
+      user.FriendRequestsReceived.Any(fr => fr.UserAdding.Id == requestingUserId);
+    IsFriend = user.Friends.Any(f => f.Id == requestingUserId) || user.IsFriendsWith.Any(f => f.Id == requestingUserId);
+    FriendsInCommon = GetFriendsInCommon(user, requestingUserId) ?? new List<UserPartialResponse>();
     ChatsInCommon = user.Chats
       .Where(c => c.Users.Any(u => u.Id == requestingUserId))
       .Select(c => new ChatBasicInfo(c))

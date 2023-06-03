@@ -138,7 +138,7 @@ public class UserDB {
     };
   }
 
-  async public Task<UserDetailedResponse?> GetDetailedUserInfo(string requestingUserId, string userId) {
+  async public Task<UserDetailedResponse> GetDetailedUserInfo(string requestingUserId, string userId) {
     var user = await _userManager.Users
       .Include(u => u.Friends)
         .ThenInclude(f => f.Friends)
@@ -149,29 +149,36 @@ public class UserDB {
       .Include(u => u.IsFriendsWith)
         .ThenInclude(f => f.IsFriendsWith)
       .Include(u => u.FriendRequestsSent)
+        .ThenInclude(f => f.UserBeingAdded)
       .Include(u => u.FriendRequestsReceived)
+        .ThenInclude(f => f.UserAdding)
       .Include(u => u.Blocking)
       .Include(u => u.BlockedBy)
-      .Include(u => u.Chats)
+      .Include(u => u.Chats.Where(c => !String.IsNullOrEmpty(c.ChatName)))
+        .ThenInclude(c => c.Users)
       .FirstOrDefaultAsync(u => u.Id == userId);
-    if (user == null) return null;
-    return new UserDetailedResponse(user, requestingUserId);
+    ArgumentNullException.ThrowIfNull(user);
+    var response = new UserDetailedResponse(user, requestingUserId);
+    return response;
   }
 
   // Update
 
-  async public Task HandleFriendRequest(string userId, string addingId, bool accepting) {
+  async public Task<FriendsResponse?> HandleFriendRequest(string userId, string addingId, bool accepting) {
     using var ctx = new ChattyBoxContext();
     ctx.FriendRequests.Remove(
       await ctx.FriendRequests.FirstAsync(f => f.UserBeingAddedId == userId && f.UserAddingId == addingId)
     );
+    FriendsResponse? friendsResponse = null;
     if (accepting) {
       var adding = await ctx.Users.FirstAsync(u => u.Id == addingId);
       var user = await ctx.Users.FirstAsync(u => u.Id == userId);
       adding.Friends.Add(user);
       user.IsFriendsWith.Add(adding);
+      friendsResponse = new FriendsResponse(user, true, addingId);
     }
     await ctx.SaveChangesAsync();
+    return friendsResponse;
   }
 
   async public Task<UserNotificationSetting> UpdateUserNotificationSettings(string userId, bool playSound, bool showOSNotification) {
@@ -183,13 +190,14 @@ public class UserDB {
     return settings;
   }
 
-  async public Task<bool?> ToggleUserBlocked(string mainUserId, string userBeingBlockedId) {
+  async public Task<UserDetailedResponse> ToggleUserBlocked(string mainUserId, string userBeingBlockedId) {
     var mainUser = await _userManager.Users
       .Include(u => u.Blocking)
       .Include(u => u.Friends)
       .FirstAsync(u => u.Id == mainUserId);
+    ArgumentNullException.ThrowIfNull(mainUser);
     var userBeingBlocked = await _userManager.Users.Include(u => u.Friends).FirstAsync(u => u.Id == userBeingBlockedId);
-    if (mainUser == null || userBeingBlocked == null) return null;
+    ArgumentNullException.ThrowIfNull(userBeingBlocked);
     if (mainUser.Blocking.Contains(userBeingBlocked)) mainUser.Blocking.Remove(userBeingBlocked);
     else {
       mainUser.Blocking.Add(userBeingBlocked);
@@ -200,7 +208,7 @@ public class UserDB {
     };
     await _userManager.UpdateAsync(mainUser);
     await _userManager.UpdateAsync(userBeingBlocked);
-    return mainUser.Blocking.Contains(userBeingBlocked);
+    return new UserDetailedResponse(userBeingBlocked, mainUserId);
   }
 
   async public Task RemoveFriend(string userId, string friendId) {

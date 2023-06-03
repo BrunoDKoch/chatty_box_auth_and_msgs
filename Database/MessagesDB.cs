@@ -24,6 +24,8 @@ public class MessagesDB {
   }
 
   async private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
+    var readMessage = await ctx.ReadMessages.Where(rm => rm.MessageId == message.Id).ToListAsync();
+    ctx.ReadMessages.RemoveRange(readMessage);
     ctx.Messages.Remove(message);
     await ctx.SaveChangesAsync();
   }
@@ -32,7 +34,6 @@ public class MessagesDB {
   async public Task<ClientConnection> CreateConnection(string userId, string connectionId) {
     using var ctx = new ChattyBoxContext();
     var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
-    Console.WriteLine($"{existingConnection}");
     if (existingConnection != null) {
       existingConnection.ConnectionId = connectionId;
       await ctx.SaveChangesAsync();
@@ -115,7 +116,10 @@ public class MessagesDB {
       .Include(c => c.Messages)
         .ThenInclude(m => m.ReadBy)
       .ToListAsync();
-    var chatPreviews = chats.Select(c => new ChatPreview(c, userId)).ToList();
+    var chatPreviews = chats
+      .Select(c => new ChatPreview(c, userId))
+      .OrderByDescending(c => c.LastMessage.SentAt)
+      .ToList();
     return chatPreviews;
   }
 
@@ -232,6 +236,8 @@ public class MessagesDB {
         .ThenInclude(f => f.Connection)
       .FirstAsync(m => m.Id == messageId);
     if (message.ReadBy.Any(r => r.ReadBy.Id == userId)) return null;
+    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
     var readMessage = new ReadMessage {
         UserId = userId,
         MessageId = messageId,
@@ -239,8 +245,9 @@ public class MessagesDB {
       };
     await ctx.ReadMessages.AddAsync(readMessage);
     await ctx.SaveChangesAsync();
+    var readMessageResponse = new ReadMessagePartialResponse(user, readMessage.ReadAt);
     return new MessageReadInformationResponse {
-      ReadMessage = new ReadMessagePartialResponse((await _userManager.FindByIdAsync(userId)!)!, readMessage.ReadAt),
+      ReadMessage = readMessageResponse,
       ConnectionId = message.From.Connection.ConnectionId
     };
   }

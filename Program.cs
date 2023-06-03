@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using System.Text.Json.Serialization;
+using System.Text.Json;
 using System.Text;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -39,9 +40,16 @@ builder.Services.AddCors(options => {
 
 builder.Services.AddControllers().AddJsonOptions(options => {
   options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+  options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+  options.JsonSerializerOptions.IncludeFields = true;
 });
 builder.Services.AddSignalR().AddJsonProtocol(o => {
   o.PayloadSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+  o.PayloadSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+  o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+  o.PayloadSerializerOptions.IgnoreReadOnlyProperties = false;
+  o.PayloadSerializerOptions.IgnoreReadOnlyFields = false;
+  o.PayloadSerializerOptions.IncludeFields = true;
 });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
