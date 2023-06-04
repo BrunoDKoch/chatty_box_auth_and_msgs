@@ -33,10 +33,9 @@ public class MessagesHub : Hub {
     _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
-  private void EnsureUserIdNotNull(string userId) {
-    if (string.IsNullOrEmpty(userId)) {
-      throw new ArgumentNullException(nameof(userId));
-    }
+  private string EnsureUserIdNotNull(string? userId) {
+    ArgumentNullException.ThrowIfNull(userId);
+    return userId;
   }
 
   async private Task AddToFriendsGroup(string userId, string connectionId) {
@@ -92,17 +91,17 @@ public class MessagesHub : Hub {
   async public override Task OnConnectedAsync() {
     await HandleException(
       async () => {
-        var id = this.Context.UserIdentifier;
-        ArgumentNullException.ThrowIfNullOrEmpty(id);
+        var id = EnsureUserIdNotNull(this.Context.UserIdentifier);
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
         var friends = await _userDB.GetAnUsersFriends(id);
+        var status = await GetStatus();
         await Clients.Caller.SendAsync("friends", friends, default);
         foreach (var friend in friends) {
           var connection = await _messagesDB.GetClientConnection(friend.Id);
           if (connection is null) continue;
           await AddToFriendsGroup(id, connection.ConnectionId);
         }
-        await Clients.Group($"{id}_friends").SendAsync("updateStatus", id, default);
+        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new {id, status, online = true }, default);
       },
       async () => await base.OnConnectedAsync()
     );
@@ -113,10 +112,9 @@ public class MessagesHub : Hub {
       if (exception != null) {
         Console.Error.WriteLine(exception);
       }
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var relevantConnections = await _messagesDB.DeleteConnection(userId);
-      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", userId, default);
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new {id = userId, status = String.Empty, online = false }, default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
@@ -133,8 +131,7 @@ public class MessagesHub : Hub {
 
   async public Task GetCallerInfo() {
     try {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
       ArgumentNullException.ThrowIfNull(user);
       await Clients.Caller.SendAsync("userInfo", new { UserName = user.UserName, Avatar = user.Avatar }, default);
@@ -145,8 +142,7 @@ public class MessagesHub : Hub {
 
   async public Task GetUnreadCount() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var count = await _messagesDB.CountUnreadMessages(userId);
       await Clients.Client(this.Context.ConnectionId).SendAsync("unread", count, default);
     });
@@ -186,8 +182,7 @@ public class MessagesHub : Hub {
 
   async public Task MarkAsRead(string id) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var readMessage = await _messagesDB.MarkAsRead(id, userId);
       if (readMessage is null) return;
       await Clients.Client(readMessage.ConnectionId).SendAsync("read", new { id, readBy = readMessage.ReadMessage }, default);
@@ -196,8 +191,7 @@ public class MessagesHub : Hub {
 
   async public Task EditMessage(string messageId, string text) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var message = await _messagesDB.EditMessage(userId, messageId, text);
       await Clients.Group(message.ChatId).SendAsync("editedMessage", message, default);
     });
@@ -205,8 +199,7 @@ public class MessagesHub : Hub {
 
   async public Task GetSpecificMessage(string messageId) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var message = await _messagesDB.GetSpecificMessage(userId, messageId);
       await Clients.Group(message.ChatId).SendAsync("specificMessage", message, default);
     });
@@ -214,8 +207,7 @@ public class MessagesHub : Hub {
 
   async public Task<bool> DeleteMessage(string messageId, string chatId) {
     return await HandleException<bool>(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _messagesDB.DeleteMessage(messageId, chatId, userId);
       return true;
     });
@@ -224,8 +216,7 @@ public class MessagesHub : Hub {
   // Get previews
   async public Task GetChatPreviews() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var previews = await _messagesDB.GetChatPreview(userId);
       foreach (var preview in previews) {
         await Groups.AddToGroupAsync(this.Context.ConnectionId, preview.Id);
@@ -236,8 +227,7 @@ public class MessagesHub : Hub {
   // Blocked users
   async public Task GetBlockedUsers() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var blocked = await _userDB.GetBlockedUsers(userId);
       await Clients.Caller.SendAsync("blockedUsers", blocked, default);
     });
@@ -246,8 +236,7 @@ public class MessagesHub : Hub {
   // Friends logic
   async public Task GetFriends() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var friends = await _userDB.GetAnUsersFriends(userId);
       await Clients.Caller.SendAsync("friends", friends, default);
     });
@@ -255,8 +244,7 @@ public class MessagesHub : Hub {
 
   async public Task SearchUser(string userName) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var results = await _userDB.GetUsers(userId, userName);
       await Clients.Caller.SendAsync("searchResults", results, default);
     });
@@ -264,8 +252,7 @@ public class MessagesHub : Hub {
 
   async public Task SendFriendRequest(string addedId) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var friendRequest = await _userDB.CreateFriendRequest(userId, addedId);
       if (friendRequest == null) return;
       await Clients.Caller.SendAsync("added", friendRequest, default);
@@ -277,8 +264,7 @@ public class MessagesHub : Hub {
 
   async public Task GetFriendRequests() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var requests = await _userDB.GetFriendRequests(userId);
       await Clients.Caller.SendAsync("pendingRequests", requests, default);
     });
@@ -286,8 +272,7 @@ public class MessagesHub : Hub {
 
   async public Task RespondToFriendRequest(string addingId, bool accept) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(addingId);
       ArgumentNullException.ThrowIfNull(user);
       var response = await _userDB.HandleFriendRequest(userId, addingId, accept);
@@ -305,8 +290,7 @@ public class MessagesHub : Hub {
 
   async public Task RemoveFriend(string friendId) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _userDB.RemoveFriend(userId, friendId);
       var connection = await _messagesDB.GetClientConnection(friendId);
       var clients = new List<string> { this.Context.ConnectionId };
@@ -320,8 +304,7 @@ public class MessagesHub : Hub {
   // User details
   async public Task<UserDetailedResponse?> GetUserDetails(string userId) {
     var result = await HandleException<UserDetailedResponse>(async () => {
-      var requestingUserId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var requestingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var details = await _userDB.GetDetailedUserInfo(requestingUserId, userId);
       ArgumentNullException.ThrowIfNull(details);
       return details;
@@ -332,8 +315,7 @@ public class MessagesHub : Hub {
   // Chat creation
   async public Task CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
       foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
         await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
@@ -344,8 +326,7 @@ public class MessagesHub : Hub {
   // Fetching chat
   async public Task GetChat(string chatId, int skip = 0) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.GetChatDetails(userId, chatId, skip);
       await Clients.Caller.SendAsync("chat", chat, default);
     });
@@ -354,10 +335,9 @@ public class MessagesHub : Hub {
   // Searching chat
   async public Task SearchChat(string chatId, string? search, DateTime? startDate, DateTime? endDate, List<string> userIds, int skip) {
     await HandleException(async () => {
-      var mainUserId = this.Context.UserIdentifier;
-      if (mainUserId == null) return;
+      var mainUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var results = await _messagesDB.GetChatMessagesFromSearch(chatId, search, startDate, endDate, userIds, skip, mainUserId);
-      if (results == null) return;
+      if (results is null) return;
       await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
     });
   }
@@ -365,8 +345,7 @@ public class MessagesHub : Hub {
   // Chat settings
   async public Task UpdateChatNotificationSettings(string chatId, bool showOSNotification, bool playSound) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var settings = await _messagesDB.UpdateChatNotificationSettings(userId, chatId, showOSNotification, playSound);
       await Clients.Caller.SendAsync("chatNotificationSettings", settings, default);
     });
@@ -375,8 +354,7 @@ public class MessagesHub : Hub {
   // User settings
   async public Task GetNotificationSettings() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var settings = await _userDB.GetNotificationSettings(userId);
       await Clients.Caller.SendAsync("notificationSettings", settings, default);
     });
@@ -384,18 +362,34 @@ public class MessagesHub : Hub {
 
   async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
       await Clients.Caller.SendAsync("notificationSettings", settings, default);
+    });
+  }
+
+  // Status
+  async public Task<string?> GetStatus() {
+    return await HandleException<string?>(async() => {
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var user = await _userManager.FindByIdAsync(userId);
+      ArgumentNullException.ThrowIfNull(user);
+      return user.Status;
+    });
+  }
+  async public Task<string?> UpdateStatus(string? status) {
+    return await HandleException<string?>(async () => {
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var result = await _userDB.UpdateStatus(userId, status);
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new {id = userId, status, online = true} , default);
+      return result;
     });
   }
 
   // Security
   async public Task GetLoginAttempts(int page = 1) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var attempts = await _userDB.GetUserLoginAttempts(userId, page);
       await Clients.Caller.SendAsync("loginAttempts", new { attempts = attempts.UserLoginAttempts, count = attempts.Count }, default);
     });
@@ -403,10 +397,9 @@ public class MessagesHub : Hub {
 
   async public Task GetMFASettings() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
-      if (user == null) return;
+      ArgumentNullException.ThrowIfNull(user);
       var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
       var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
       await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled, providers }, default);
@@ -415,10 +408,9 @@ public class MessagesHub : Hub {
 
   async public Task SetMFASettings(bool enable) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
-      if (user == null) return;
+      ArgumentNullException.ThrowIfNull(user);
       await _userManager.ResetAuthenticatorKeyAsync(user);
       if (enable) {
         var key = await _userManager.GetAuthenticatorKeyAsync(user);
@@ -437,10 +429,9 @@ public class MessagesHub : Hub {
   // Privacy
   async public Task SetPrivacySettings(int privacyLevel) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
-      if (user == null) return;
+      ArgumentNullException.ThrowIfNull(user);
       user.PrivacyLevel = privacyLevel;
       await _userManager.UpdateAsync(user);
       await Clients.Caller.SendAsync("privacyLevel", privacyLevel, default);
@@ -449,10 +440,9 @@ public class MessagesHub : Hub {
 
   async public Task GetPrivacySettings() {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
-      if (user == null) return;
+      ArgumentNullException.ThrowIfNull(user);
       if (user.PrivacyLevel == 0) {
         user.PrivacyLevel = 1;
         await _userManager.UpdateAsync(user);
@@ -464,8 +454,7 @@ public class MessagesHub : Hub {
   // Blocking
   async public Task<UserDetailedResponse?> ToggleBlock(string userToBlockId) {
     var result = await HandleException<UserDetailedResponse>(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
       var blockedConnection = await _messagesDB.GetClientConnection(userToBlockId);
       //await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
@@ -479,10 +468,9 @@ public class MessagesHub : Hub {
   // Change username
   async public Task ChangeUserName(string userName) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNullOrEmpty(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
-      if (user == null) return;
+      ArgumentNullException.ThrowIfNull(user);
       user.UserName = userName;
       await _userManager.UpdateAsync(user);
       await Clients.Caller.SendAsync("userName", user.UserName, default);
@@ -492,8 +480,7 @@ public class MessagesHub : Hub {
   // Add & remove users
   async public Task AddUserToChat(string userId, string chatId) {
     await HandleException(async () => {
-      var requestingUserId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var requestingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.AddUserToChat(userId, requestingUserId, chatId);
       var systemMessage = await _messagesDB.CreateSystemMessage(
         instigatingUserId: requestingUserId,
@@ -509,8 +496,7 @@ public class MessagesHub : Hub {
   }
   async public Task RemoveUserFromChat(string userId, string chatId) {
     await HandleException(async () => {
-      var requestingUserId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNull(requestingUserId);
+      var requestingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.RemoveUserFromChat(userId, requestingUserId, chatId);
       ArgumentNullException.ThrowIfNull(chat);
       var systemMessage = await _messagesDB.CreateSystemMessage(
@@ -527,8 +513,7 @@ public class MessagesHub : Hub {
   }
   async public Task LeaveChat(string chatId) {
     await HandleException(async () => {
-      var userId = this.Context.UserIdentifier;
-      ArgumentNullException.ThrowIfNull(userId);
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var systemMessage = await _messagesDB.CreateSystemMessage(
         instigatingUserId: userId,
         chatId,
