@@ -222,4 +222,12 @@ public class UserDB {
     user.IsFriendsWith.Remove(friend);
     await _userManager.UpdateAsync(user);
   }
+
+  async public Task<string?> UpdateStatus(string userId, string? status) {
+    var user = await _userManager.FindByIdAsync(userId);
+    ArgumentNullException.ThrowIfNull(user);
+    user.Status = status;
+    await _userManager.UpdateAsync(user);
+    return status;
+  }
 }

@@ -191,6 +191,7 @@ public class UserPartialResponse {
     Avatar = user.Avatar;
     IsBlocking = user.Blocking.Any(u => u.Id == requestingUserId);
     IsBlocked = user.BlockedBy.Any(u => u.Id == requestingUserId);
+    Status = user.Status;
   }
   public UserPartialResponse(User user) {
     Id = user.Id;
@@ -198,12 +199,14 @@ public class UserPartialResponse {
     Avatar = user.Avatar;
     IsBlocked = false;
     IsBlocking = false;
+    Status = user.Status;
   }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
   public bool IsBlocking { get; set; }
   public bool IsBlocked { get; set; }
+  public string? Status { get; set; }
 }
 
 public class UserDetailedResponse : UserPartialResponse {
@@ -211,13 +214,13 @@ public class UserDetailedResponse : UserPartialResponse {
   private List<UserPartialResponse> GetFriendsInCommon(User user, string requestingUserId) {
     var list1 = user.Friends
       .Where(
-          f => f.Friends.Any(ff => ff.Id == requestingUserId) || 
+          f => f.Friends.Any(ff => ff.Id == requestingUserId) ||
           f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
       .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();
     var list2 = user.IsFriendsWith
       .Where(
-          f => f.Friends.Any(ff => ff.Id == requestingUserId) || 
+          f => f.Friends.Any(ff => ff.Id == requestingUserId) ||
           f.IsFriendsWith.Any(ff => ff.Id == requestingUserId)
         )
       .Select(f => new UserPartialResponse(f, requestingUserId)).ToList();

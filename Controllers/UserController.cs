@@ -13,6 +13,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.IdentityModel.Tokens.Jwt;
+using UAParser;
+using Microsoft.Net.Http.Headers;
 
 namespace ChattyBox.Controllers;
 
@@ -43,6 +45,21 @@ public class UserController : ControllerBase {
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
+  }
+
+  private static ClientInfo GetClientInfo(HttpContext context) {
+    var parser = Parser.GetDefault();
+    var result = parser.Parse(context.Request.Headers[HeaderNames.UserAgent]);
+    ArgumentNullException.ThrowIfNull(result);
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.WriteLine(result.String);
+    Console.WriteLine(result.Device.Family);
+    Console.WriteLine(result.OS.Family);
+    Console.WriteLine(result.OS.Major);
+    Console.WriteLine(result.UA);
+    Console.WriteLine(result.UserAgent);
+    Console.ResetColor();
+    return result;
   }
 
   private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -95,6 +112,7 @@ public class UserController : ControllerBase {
     } else {
       ipAddress = HttpContext.Connection.RemoteIpAddress;
     }
+    var clientInfo = GetClientInfo(context);
     var city = await _maxMindClient.CityAsync(ipAddress);
     var loginAttempt = new UserLoginAttempt {
       Id = Guid.NewGuid().ToString(),
@@ -106,6 +124,9 @@ public class UserController : ControllerBase {
       CountryIsoCode = city.Country.IsoCode ?? "unknown",
       Latitude = (double)city.Location.Latitude!,
       Longitude = (double)city.Location.Longitude!,
+      OS = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}",
+      Device = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}",
+      Browser = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}"
     };
     return loginAttempt;
   }
@@ -130,7 +151,7 @@ public class UserController : ControllerBase {
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
     var user = await _userManager.FindByEmailAsync(data.Email);
-    if (user == null) return Unauthorized();
+    if (user is null) return Unauthorized();
 
     try {
       var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);

@@ -23,6 +23,12 @@ public partial class User : IdentityUser {
   [Column("privacyLevel")]
   public int PrivacyLevel { get; set; } = 1;
 
+  [Column("status")]
+  public string? Status { get; set; }
+
+  [Column("showStatus")]
+  public bool ShowStatus { get; set; } = true;
+
   [InverseProperty("From")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 

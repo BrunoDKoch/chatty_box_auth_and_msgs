@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace ChattyBox.Hubs;
 
+[Authorize]
 public class MessagesHub : Hub {
   private List<string> _validLetters = ValidCharacters.GetLetters().Split().ToList();
 
