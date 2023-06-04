@@ -46,6 +46,15 @@ public partial class UserLoginAttempt {
   [Column("longitude")]
   public double Longitude { get; set; }
 
+  [Column("os")]
+  public string OS { get; set; } = null!;
+
+  [Column("browser")]
+  public string Browser { get; set; } = null!;
+
+  [Column("device")]
+  public string Device { get; set; } = null!;
+
   [Column("success")]
   public bool Success { get; set; }
 

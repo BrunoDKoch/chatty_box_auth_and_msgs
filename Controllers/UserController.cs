@@ -51,14 +51,6 @@ public class UserController : ControllerBase {
     var parser = Parser.GetDefault();
     var result = parser.Parse(context.Request.Headers[HeaderNames.UserAgent]);
     ArgumentNullException.ThrowIfNull(result);
-    Console.ForegroundColor = ConsoleColor.Blue;
-    Console.WriteLine(result.String);
-    Console.WriteLine(result.Device.Family);
-    Console.WriteLine(result.OS.Family);
-    Console.WriteLine(result.OS.Major);
-    Console.WriteLine(result.UA);
-    Console.WriteLine(result.UserAgent);
-    Console.ResetColor();
     return result;
   }
 
