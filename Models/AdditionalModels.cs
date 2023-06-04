@@ -48,7 +48,7 @@ public class ChatMessage {
   public string Id { get; set; } = null!;
   public string ChatId { get; set; } = null!;
   public DateTime SentAt { get; set; }
-  public DateTime EditedAt { get; set; }
+  public DateTime? EditedAt { get; set; }
   public string Text { get; set; } = null!;
   public string? ReplyToId { get; set; } = null!;
   public UserPartialResponse User { get; set; } = null!;
@@ -307,5 +307,5 @@ public enum ExceptionActionType {
 
 public class MessageReadInformationResponse {
   public ReadMessagePartialResponse ReadMessage { get; set; } = null!;
-  public string ConnectionId { get; set; } = null!;
+  public string? ConnectionId { get; set; } = null!;
 }

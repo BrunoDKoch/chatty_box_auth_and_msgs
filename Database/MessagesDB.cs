@@ -248,7 +248,7 @@ public class MessagesDB {
     var readMessageResponse = new ReadMessagePartialResponse(user, readMessage.ReadAt);
     return new MessageReadInformationResponse {
       ReadMessage = readMessageResponse,
-      ConnectionId = message.From.Connection.ConnectionId
+      ConnectionId = message.From.Connection is null ? null : message.From.Connection.ConnectionId
     };
   }
 

@@ -17,7 +17,7 @@ public partial class Message {
   public DateTime SentAt { get; set; }
 
   [Column("editedAt")]
-  public DateTime EditedAt { get; set; }
+  public DateTime? EditedAt { get; set; } = null!;
 
   [Column("fromId")]
   [StringLength(450)]

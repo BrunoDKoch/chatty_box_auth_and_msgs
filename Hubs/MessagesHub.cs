@@ -185,7 +185,7 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var readMessage = await _messagesDB.MarkAsRead(id, userId);
-      if (readMessage is null) return;
+      if (readMessage is null || readMessage.ConnectionId is null) return;
       await Clients.Client(readMessage.ConnectionId).SendAsync("read", new { id, readBy = readMessage.ReadMessage }, default);
     });
   }

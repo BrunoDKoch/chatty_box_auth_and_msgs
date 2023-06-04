@@ -86,6 +86,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     ValidAudience = tokenOptions.GetValue<string>("Audience"),
     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
   };
+  options.SaveToken = true;
+  options.AutomaticRefreshInterval = TimeSpan.FromMinutes(5);
 });
 
 builder.Services.AddCookiePolicy(options => {
