@@ -118,7 +118,7 @@ public class MessagesDB {
       .ToListAsync();
     var chatPreviews = chats
       .Select(c => new ChatPreview(c, userId))
-      .OrderByDescending(c => c.LastMessage.SentAt)
+      .OrderByDescending(c => c.LastMessage is null ? c.CreatedAt : c.LastMessage.SentAt)
       .ToList();
     return chatPreviews;
   }
