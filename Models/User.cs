@@ -13,9 +13,9 @@ namespace ChattyBox.Models;
 [Index("Email", Name = "Users_email_key", IsUnique = true)]
 [Index("NormalizedEmail", Name = "Users_normalizedEmail_key", IsUnique = true)]
 public partial class User : IdentityUser {
+
   [InverseProperty("User")]
-  [Column("clientConnection")]
-  public virtual ClientConnection Connection { get; set; } = null!;
+  public virtual ICollection<ClientConnection> ClientConnections { get; set; } = new List<ClientConnection>();
 
   [Column("avatar")]
   public string? Avatar { get; set; }

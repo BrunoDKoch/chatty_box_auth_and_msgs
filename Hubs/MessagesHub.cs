@@ -4,8 +4,10 @@ using System.Collections.Concurrent;
 using ChattyBox.Database;
 using ChattyBox.Misc;
 using ChattyBox.Models;
+using ChattyBox.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using UAParser;
 
 namespace ChattyBox.Hubs;
 
@@ -24,13 +26,14 @@ public class MessagesHub : Hub {
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
-      SignInManager<User> signInManager) {
+      SignInManager<User> signInManager,
+      MaxMind.GeoIP2.WebServiceClient maxMindClient) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
     _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
-    _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
+    _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, maxMindClient);
   }
 
   private string EnsureUserIdNotNull(string? userId) {
@@ -38,8 +41,9 @@ public class MessagesHub : Hub {
     return userId;
   }
 
-  async private Task AddToFriendsGroup(string userId, string connectionId) {
-    await Groups.AddToGroupAsync(connectionId, $"{userId}_friends", default);
+  async private Task AddToFriendsGroup(string userId, List<ClientConnection> clientConnections) {
+    foreach (var clientConnection in clientConnections)
+      await Groups.AddToGroupAsync(clientConnection.ConnectionId, $"{userId}_friends", default);
   }
 
   async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null, ExceptionActionType actionType = ExceptionActionType.OTHER) {
@@ -92,14 +96,14 @@ public class MessagesHub : Hub {
     await HandleException(
       async () => {
         var id = EnsureUserIdNotNull(this.Context.UserIdentifier);
-        var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId);
+        var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, this.Context.GetHttpContext());
+        // Create a group to send messages to all of a client's connected devices
+        await Groups.AddToGroupAsync(this.Context.ConnectionId, $"{id}_connections", default);
         var friends = await _userDB.GetAnUsersFriends(id);
         var status = await GetStatus();
-        await Clients.Caller.SendAsync("friends", friends, default);
+        await Clients.Caller.SendAsync("friends", friends.Select(f => new FriendsResponse(f, true, id)), default);
         foreach (var friend in friends) {
-          var connection = await _messagesDB.GetClientConnection(friend.Id);
-          if (connection is null) continue;
-          await AddToFriendsGroup(id, connection.ConnectionId);
+          await AddToFriendsGroup(id, friend.ClientConnections.ToList());
         }
         await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status, online = true }, default);
       },
@@ -113,7 +117,7 @@ public class MessagesHub : Hub {
         Console.Error.WriteLine(exception);
       }
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var relevantConnections = await _messagesDB.DeleteConnection(userId);
+      await _messagesDB.MarkConnectionAsInactive(userId, this.Context.ConnectionId);
       await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = String.Empty, online = false }, default);
     },
       async () => await base.OnDisconnectedAsync(exception)
@@ -184,8 +188,8 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var readMessage = await _messagesDB.MarkAsRead(id, userId);
-      if (readMessage is null || readMessage.ConnectionId is null) return;
-      await Clients.Client(readMessage.ConnectionId).SendAsync("read", new { id, readBy = readMessage.ReadMessage }, default);
+      if (readMessage is null || readMessage.ConnectionIds is null || readMessage.ConnectionIds.Count == 0) return;
+      await Clients.Clients(readMessage.ConnectionIds).SendAsync("read", new { id, readBy = readMessage.ReadMessage }, default);
     });
   }
 
@@ -256,9 +260,9 @@ public class MessagesHub : Hub {
       var friendRequest = await _userDB.CreateFriendRequest(userId, addedId);
       if (friendRequest == null) return;
       await Clients.Caller.SendAsync("added", friendRequest, default);
-      var addedConnection = await _messagesDB.GetClientConnection(addedId);
-      if (addedConnection == null) return;
-      await Clients.Client(addedConnection.ConnectionId).SendAsync("newFriendRequest", friendRequest, default);
+      var addedConnections = await _messagesDB.GetClientConnections(addedId);
+      if (addedConnections.Count == 0) return;
+      await Clients.Group($"{addedId}_connections").SendAsync("newFriendRequest", friendRequest, default);
     });
   }
 
@@ -273,17 +277,22 @@ public class MessagesHub : Hub {
   async public Task RespondToFriendRequest(string addingId, bool accept) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(addingId);
+      var user = await _userManager
+        .Users
+        .Include(u => u.ClientConnections
+          .Where(c => c.Active)
+        )
+        .FirstOrDefaultAsync(u => u.Id == addingId);
       ArgumentNullException.ThrowIfNull(user);
       var response = await _userDB.HandleFriendRequest(userId, addingId, accept);
       if (accept) {
-        var connection = await _messagesDB.GetClientConnection(addingId);
+        var connection = await _messagesDB.GetClientConnections(addingId);
         if (connection is not null) {
-          await AddToFriendsGroup(userId, connection.ConnectionId);
-          await AddToFriendsGroup(addingId, this.Context.ConnectionId);
-          await Clients.Client(connection.ConnectionId).SendAsync("newFriend", response, default);
+          await AddToFriendsGroup(userId, connection);
+          await AddToFriendsGroup(addingId, user.ClientConnections.ToList());
+          await Clients.Group($"{addingId}_connections").SendAsync("newFriend", response, default);
         }
-        await Clients.Caller.SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
+        await Clients.Group($"{userId}_connections").SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
       }
     });
   }
@@ -292,9 +301,9 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _userDB.RemoveFriend(userId, friendId);
-      var connection = await _messagesDB.GetClientConnection(friendId);
+      var connections = await _messagesDB.GetClientConnections(friendId);
       var clients = new List<string> { this.Context.ConnectionId };
-      if (connection is not null) clients.Add(connection.ConnectionId);
+      if (connections.Count > 0) clients = clients.Concat(connections.Select(c => c.ConnectionId)).ToList();
       await Clients
         .Clients(clients)
         .SendAsync("removeFriend", new { userId, friendId });
@@ -360,10 +369,10 @@ public class MessagesHub : Hub {
     });
   }
 
-  async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification) {
+  async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification, bool showAlert) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification);
+      var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification, showAlert);
       await Clients.Caller.SendAsync("notificationSettings", settings, default);
     });
   }
@@ -456,10 +465,10 @@ public class MessagesHub : Hub {
     var result = await HandleException<UserDetailedResponse>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var blocked = await _userDB.ToggleUserBlocked(userId, userToBlockId);
-      var blockedConnection = await _messagesDB.GetClientConnection(userToBlockId);
+      var blockedConnections = await _messagesDB.GetClientConnections(userToBlockId);
       //await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
-      if (blockedConnection is not null)
-        await Clients.Client(blockedConnection.ConnectionId).SendAsync("blocked", new { id = userId, blocked }, default);
+      if (blockedConnections.Count > 0)
+        await Clients.Group($"{userToBlockId}_connections").SendAsync("blocked", new { id = userId, blocked }, default);
       return blocked;
     });
     return result;
@@ -488,10 +497,12 @@ public class MessagesHub : Hub {
         eventType: "user added",
         affectedUserId: userId
       );
-      var connectionId = await _messagesDB.GetClientConnection(userId);
-      if (connectionId is not null) {
-        await Clients.Client(connectionId.ConnectionId).SendAsync("addedToChat", chat, default);
-        await Groups.AddToGroupAsync(connectionId.ConnectionId, chatId);
+      var connections = await _messagesDB.GetClientConnections(userId);
+      if (connections.Count > 0) {
+        var connectionIds = connections.Select(c => c.ConnectionId).ToList();
+        await Clients.Group($"{userId}_connections").SendAsync("removedFromChat", chatId, default);
+        foreach (var connectionId in connectionIds)
+          await Groups.AddToGroupAsync(connectionId, chatId);
       }
       await Clients.Caller.SendAsync("systemMessage", new SystemMessagePartial(systemMessage), default);
     });
@@ -507,10 +518,12 @@ public class MessagesHub : Hub {
         eventType: "user removed",
         affectedUserId: userId
       );
-      var connectionId = await _messagesDB.GetClientConnection(userId);
-      if (connectionId is not null) {
-        await Clients.Client(connectionId.ConnectionId).SendAsync("removedFromChat", chatId, default);
-        await Groups.RemoveFromGroupAsync(connectionId.ConnectionId, chatId);
+      var connections = await _messagesDB.GetClientConnections(userId);
+      if (connections.Count > 0) {
+        var connectionIds = connections.Select(c => c.ConnectionId).ToList();
+        await Clients.Group($"{userId}_connections").SendAsync("removedFromChat", chatId, default);
+        foreach (var connectionId in connectionIds)
+          await Groups.RemoveFromGroupAsync(connectionId, chatId);
       }
       await Clients.Group(chatId).SendAsync("systemMessage", new SystemMessagePartial(systemMessage), default);
     });
@@ -542,8 +555,8 @@ public class MessagesHub : Hub {
         eventType: "added admin"
       );
       await Clients.Group(chatId).SendAsync("systemMessage", systemMessage, default);
-      if (admin.Connection is not null)
-        await Clients.Client(admin.Connection.ConnectionId).SendAsync("addedAsAdmin", chatId, default);
+      if (admin.ClientConnections is not null)
+        await Clients.Group($"{userId}_connections").SendAsync("addedAsAdmin", chatId, default);
       return new UserPartialResponse(admin, requestingUserId);
     });
     return result!;

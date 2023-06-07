@@ -20,6 +20,10 @@ public partial class UserNotificationSetting {
   [Column("showOSNotification")]
   public bool? ShowOSNotification { get; set; }
 
+  [Required]
+  [Column("showAlert")]
+  public bool ShowAlert { get; set; } = true;
+
   [ForeignKey("UserId")]
   [InverseProperty("UserNotificationSetting")]
   public virtual User User { get; set; } = null!;

@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Models;
 using ChattyBox.Context;
+using ChattyBox.Services;
 using Microsoft.AspNetCore.Identity;
+using UAParser;
+using MaxMind.GeoIP2;
+using System.Net;
 
 namespace ChattyBox.Database;
 
@@ -11,16 +15,19 @@ public class MessagesDB {
   private readonly RoleManager<Role> _roleManager;
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
+  private readonly WebServiceClient _maxMindClient;
 
   public MessagesDB(
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
-      SignInManager<User> signInManager) {
+      SignInManager<User> signInManager,
+      WebServiceClient maxMindClient) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
+    _maxMindClient = maxMindClient;
   }
 
   async private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
@@ -30,18 +37,75 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
   }
 
-  // Create
-  async public Task<ClientConnection> CreateConnection(string userId, string connectionId) {
-    using var ctx = new ChattyBoxContext();
-    var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
-    if (existingConnection != null) {
-      existingConnection.ConnectionId = connectionId;
-      await ctx.SaveChangesAsync();
-      return existingConnection;
+  async private Task<ClientConnection?> CheckExistingConnection(ChattyBoxContext ctx, string userId, string connectionId, HttpContext context) {
+    IPAddress iPAddress;
+    if (context.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(context.Connection.RemoteIpAddress.ToString())) {
+      iPAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
+    } else {
+      iPAddress = context.Connection.RemoteIpAddress;
     }
+    var clientInfo = ParsingService.ParseContext(context);
+    var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(
+      c => c.UserId == userId && (
+        c.ConnectionId == connectionId || (
+          c.IpAddress == iPAddress.ToString() &&
+          c.Os == $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}" &&
+          c.Device == $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}" &&
+          c.Browser == $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}"
+          )
+      )
+    );
+    return existingConnection;
+  }
+
+  // Create
+  async public Task<ClientConnection> CreateConnection(string userId, string connectionId, HttpContext context) {
+    using var ctx = new ChattyBoxContext();
+    IPAddress iPAddress;
+    if (context.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(context.Connection.RemoteIpAddress.ToString())) {
+      iPAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
+    } else {
+      iPAddress = context.Connection.RemoteIpAddress;
+    }
+    var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context);
+    if (existingConnection != null) {
+      var newConnection = new ClientConnection {
+        UserId = userId,
+        ConnectionId = connectionId,
+        IpAddress = iPAddress.ToString(),
+        CityName = existingConnection.CityName,
+        GeoNameId = existingConnection.GeoNameId,
+        CountryName = existingConnection.CountryName,
+        CountryIsoCode = existingConnection.CountryIsoCode,
+        Latitude = existingConnection.Latitude!,
+        Longitude = existingConnection.Longitude!,
+        Os = existingConnection.Os,
+        Device = existingConnection.Device,
+        Browser = existingConnection.Browser,
+        CreatedAt = DateTime.UtcNow,
+      };
+      ctx.Remove(existingConnection);
+      await ctx.ClientConnections.AddAsync(newConnection);
+      await ctx.SaveChangesAsync();
+      return newConnection;
+    }
+
+    var clientInfo = ParsingService.ParseContext(context);
+    var geoData = await _maxMindClient.CityAsync(iPAddress);
     var clientConnection = new ClientConnection {
       UserId = userId,
-      ConnectionId = connectionId
+      ConnectionId = connectionId,
+      IpAddress = iPAddress.ToString(),
+      CityName = geoData.City.Name ?? "unknown",
+      GeoNameId = geoData.City.GeoNameId != null ? geoData.City.GeoNameId.ToString()! : "unknown",
+      CountryName = geoData.Country.Name ?? "unknown",
+      CountryIsoCode = geoData.Country.IsoCode ?? "unknown",
+      Latitude = (double)geoData.Location.Latitude!,
+      Longitude = (double)geoData.Location.Longitude!,
+      Os = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}",
+      Device = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}",
+      Browser = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}",
+      CreatedAt = DateTime.UtcNow,
     };
     await ctx.ClientConnections.AddAsync(clientConnection);
     await ctx.SaveChangesAsync();
@@ -114,8 +178,11 @@ public class MessagesDB {
       .Include(c => c.Users)
       .Include(c => c.ChatNotificationSettings)
       .Include(c => c.Messages)
+        .ThenInclude(m => m.From)
+      .Include(c => c.Messages)
         .ThenInclude(m => m.ReadBy)
       .ToListAsync();
+    if (chats.Count == 0) return new List<ChatPreview>();
     var chatPreviews = chats
       .Select(c => new ChatPreview(c, userId))
       .OrderByDescending(c => c.LastMessage is null ? c.CreatedAt : c.LastMessage.SentAt)
@@ -164,13 +231,15 @@ public class MessagesDB {
     return count;
   }
 
-  async public Task<ClientConnection?> GetClientConnection(string userId) {
+  async public Task<List<ClientConnection>> GetClientConnections(string userId) {
     using var ctx = new ChattyBoxContext();
     try {
-      var clientConnection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
+      var clientConnection = await ctx.ClientConnections
+        .Where(c => c.UserId == userId && c.Active)
+        .ToListAsync();
       return clientConnection;
     } catch (InvalidOperationException) {
-      return null;
+      return new List<ClientConnection>();
     }
   }
 
@@ -233,22 +302,22 @@ public class MessagesDB {
       .Include(m => m.ReadBy)
         .ThenInclude(r => r.ReadBy)
       .Include(m => m.From)
-        .ThenInclude(f => f.Connection)
+        .ThenInclude(f => f.ClientConnections)
       .FirstAsync(m => m.Id == messageId);
     if (message.ReadBy.Any(r => r.ReadBy.Id == userId)) return null;
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     var readMessage = new ReadMessage {
-        UserId = userId,
-        MessageId = messageId,
-        ReadAt = DateTime.UtcNow,
-      };
+      UserId = userId,
+      MessageId = messageId,
+      ReadAt = DateTime.UtcNow,
+    };
     await ctx.ReadMessages.AddAsync(readMessage);
     await ctx.SaveChangesAsync();
     var readMessageResponse = new ReadMessagePartialResponse(user, readMessage.ReadAt);
     return new MessageReadInformationResponse {
       ReadMessage = readMessageResponse,
-      ConnectionId = message.From.Connection is null ? null : message.From.Connection.ConnectionId
+      ConnectionIds = message.From.ClientConnections.Select(c => c.ConnectionId).ToList(),
     };
   }
 
@@ -269,6 +338,7 @@ public class MessagesDB {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
+    if (chat.IsGroupChat) throw new InvalidOperationException("Cannot add users to private chat");
     if (!chat.Admins.Any(a => a.Id == requestingUserId))
       throw new ArgumentException("User is not an admin");
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);
@@ -291,7 +361,7 @@ public class MessagesDB {
     if (chat.Admins.Any(a => a.Id == userId))
       throw new ArgumentException("User is already an admin");
     var user = await ctx.Users
-      .Include(u => u.Connection)
+      .Include(u => u.ClientConnections)
       .FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     chat.Admins.Add(user);
@@ -334,6 +404,15 @@ public class MessagesDB {
     return settings;
   }
 
+  async public Task<ClientConnection> MarkConnectionAsInactive(string userId, string connectionId) {
+    using var ctx = new ChattyBoxContext();
+    var clientConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.ConnectionId == connectionId && c.UserId == userId);
+    ArgumentNullException.ThrowIfNull(clientConnection);
+    clientConnection.Active = false;
+    await ctx.SaveChangesAsync();
+    return clientConnection;
+  }
+
   // Delete
   async public Task<bool> DeleteMessage(string messageId, string chatId, string userId) {
     using var ctx = new ChattyBoxContext();
@@ -346,25 +425,11 @@ public class MessagesDB {
     return true;
   }
 
-  async public Task<List<string>?> DeleteConnection(string userId) {
+  async public Task DeleteConnection(string connectionId) {
     using var ctx = new ChattyBoxContext();
-    var connection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+    var connection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.ConnectionId == connectionId);
     ArgumentNullException.ThrowIfNull(connection);
     ctx.Remove(connection);
     await ctx.SaveChangesAsync();
-    var userFriends = await ctx.Users
-      .Include(u => u.Connection)
-      .Where(
-        u => u.Friends.Any(f => f.Id == userId) ||
-        u.IsFriendsWith.Any(f => f.Id == userId) ||
-        u.Chats.Any(c => c.Users.Any(cu => cu.Id == userId))
-      )
-      .ToListAsync();
-    try {
-      var connections = userFriends.Select(u => u.Connection.ConnectionId);
-      return connections.ToList();
-    } catch (NullReferenceException) {
-      return null;
-    }
   }
 }

@@ -43,22 +43,16 @@ public class UserDB {
   }
 
   // Read
-  async public Task<List<FriendsResponse>> GetAnUsersFriends(string userId) {
+  async public Task<List<User>> GetAnUsersFriends(string userId) {
     var user = await _userManager.Users
-      .Include(u => u.Friends).ThenInclude(f => f.Connection)
-      .Include(u => u.IsFriendsWith).ThenInclude(f => f.Connection)
+      .Include(u => u.Friends.Where(f => f.ClientConnections.Any() && f.ClientConnections.Any(c => c.Active)))
+        .ThenInclude(f => f.ClientConnections.Where(c => c.Active))
+      .Include(u => u.IsFriendsWith.Where(f => f.ClientConnections.Any() && f.ClientConnections.Any(c => c.Active)))
+        .ThenInclude(f => f.ClientConnections.Where(c => c.Active))
       .FirstAsync(u => u.Id == userId);
-    List<FriendsResponse> friends = new List<FriendsResponse>();
     List<User> userFriends = new List<User>();
     userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();
-    foreach (var friend in userFriends) {
-      if (friend.Connection != null) {
-        friends.Add(new FriendsResponse(friend, true, userId));
-      } else {
-        friends.Add(new FriendsResponse(friend, false, userId));
-      }
-    }
-    return friends;
+    return userFriends;
   }
 
   async public Task<List<UserPartialResponse>> GetBlockedUsers(string userId) {
@@ -73,7 +67,7 @@ public class UserDB {
     // Ensuring the user doesn't somehow search for themselves by adding an ID filter
     var currentUser = await _userManager.FindByIdAsync(userId);
     var users = await _userManager.Users
-      .Include(u => u.Connection)
+      .Include(u => u.ClientConnections)
       .Include(u => u.Friends)
       .Include(u => u.IsFriendsWith)
       .Include(u => u.Chats)
@@ -181,11 +175,12 @@ public class UserDB {
     return friendsResponse;
   }
 
-  async public Task<UserNotificationSetting> UpdateUserNotificationSettings(string userId, bool playSound, bool showOSNotification) {
+  async public Task<UserNotificationSetting> UpdateUserNotificationSettings(string userId, bool playSound, bool showOSNotification, bool showAlert) {
     using var ctx = new ChattyBoxContext();
     var settings = await ctx.UserNotificationSettings.FirstAsync(n => n.UserId == userId);
     settings.PlaySound = playSound;
     settings.ShowOSNotification = showOSNotification;
+    settings.ShowAlert = showAlert;
     await ctx.SaveChangesAsync();
     return settings;
   }

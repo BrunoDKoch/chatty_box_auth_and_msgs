@@ -27,6 +27,10 @@ public partial class ChatNotificationSetting {
   [Column("showOSNotification")]
   public bool? ShowOSNotification { get; set; }
 
+  [Required]
+  [Column("showAlert")]
+  public bool ShowAlert { get; set; } = true;
+
   [ForeignKey("ChatId")]
   [InverseProperty("ChatNotificationSettings")]
   public virtual Chat Chat { get; set; } = null!;

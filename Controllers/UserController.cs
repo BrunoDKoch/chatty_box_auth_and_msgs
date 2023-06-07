@@ -14,7 +14,6 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.IdentityModel.Tokens.Jwt;
 using UAParser;
-using Microsoft.Net.Http.Headers;
 
 namespace ChattyBox.Controllers;
 
@@ -45,13 +44,6 @@ public class UserController : ControllerBase {
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
-  }
-
-  private static ClientInfo GetClientInfo(HttpContext context) {
-    var parser = Parser.GetDefault();
-    var result = parser.Parse(context.Request.Headers[HeaderNames.UserAgent]);
-    ArgumentNullException.ThrowIfNull(result);
-    return result;
   }
 
   private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -90,7 +82,7 @@ public class UserController : ControllerBase {
     } else {
       ipAddress = HttpContext.Connection.RemoteIpAddress;
     }
-    var clientInfo = GetClientInfo(context);
+    var clientInfo = ParsingService.ParseContext(context);
     var city = await _maxMindClient.CityAsync(ipAddress);
     var loginAttempt = new UserLoginAttempt {
       Id = Guid.NewGuid().ToString(),
@@ -305,7 +297,7 @@ public class UserController : ControllerBase {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
     var image = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
-    var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager);
+    var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, _maxMindClient);
     var message = await messagesDB.CreateMessage(user.Id, chatId, image);
     await _hubContext.Clients.Group(chatId).SendAsync("newMessage", message, default);
     return Ok(message);

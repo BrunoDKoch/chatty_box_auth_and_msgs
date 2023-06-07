@@ -170,7 +170,7 @@ public class ChatPreview {
         Text = m.Text,
         Read = m.ReadBy.Any(r => r.UserId == userId) || m.FromId == userId,
       })
-      .First()
+      .FirstOrDefault()
       : null;
     Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
     CreatedAt = chat.CreatedAt;
@@ -309,5 +309,5 @@ public enum ExceptionActionType {
 
 public class MessageReadInformationResponse {
   public ReadMessagePartialResponse ReadMessage { get; set; } = null!;
-  public string? ConnectionId { get; set; } = null!;
+  public List<string>? ConnectionIds { get; set; } = null!;
 }

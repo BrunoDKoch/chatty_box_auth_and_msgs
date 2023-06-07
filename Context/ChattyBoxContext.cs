@@ -64,9 +64,15 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   protected override void OnModelCreating(ModelBuilder modelBuilder) {
 
     modelBuilder.Entity<ClientConnection>(entity => {
-      entity.HasKey(e => e.UserId).HasName("ClientConnection_pkey");
+      entity.HasKey(e => new { e.UserId, e.ConnectionId }).HasName("ClientConnection_pkey");
 
-      entity.HasOne(e => e.User).WithOne(u => u.Connection);
+      entity.Property(e => e.Browser).HasDefaultValueSql("('unknown')");
+      entity.Property(e => e.Device).HasDefaultValueSql("('unknown')");
+      entity.Property(e => e.Os).HasDefaultValueSql("('unknown')");
+
+      entity.HasOne(d => d.User).WithMany(p => p.ClientConnections)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("ClientConnection_userId_fkey");
     });
 
     modelBuilder.Entity<Chat>(entity => {
@@ -173,6 +179,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
     });
 
     modelBuilder.Entity<User>(entity => {
+      entity.Property(e => e.PrivacyLevel).HasDefaultValueSql("((1))");
+      entity.Property(e => e.ShowStatus).HasDefaultValueSql("((1))");
       entity.HasMany(d => d.Roles).WithMany(p => p.Users)
         .UsingEntity<UserRole>(
           r => r.HasOne<Role>().WithMany()
