@@ -79,6 +79,7 @@ public class CompleteChatResponse {
   public string? ChatName { get; set; }
   public bool UserIsAdmin { get; set; }
   public DateTime CreatedAt { get; set; }
+  public ICollection<UserPartialResponse> Admins {get; set;}  = new List<UserPartialResponse>();
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
   public ICollection<SystemMessagePartial> SystemMessages { get; set; } = new List<SystemMessagePartial>();
@@ -91,6 +92,7 @@ public class CompleteChatResponse {
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
     UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
+    Admins = chat.Admins.Select(a => new UserPartialResponse(a, mainUserId)).ToList();
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
     SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
@@ -100,7 +102,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
-
+    Admins = chat.Admins.Select(a => new UserPartialResponse(a)).ToList();
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
@@ -113,7 +115,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
-
+    Admins = chat.Admins.Select(a => new UserPartialResponse(a)).ToList();
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;
@@ -126,7 +128,7 @@ public class CompleteChatResponse {
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount, string mainUserId) {
     Id = chat.Id;
     IsGroupChat = chat.IsGroupChat;
-
+    Admins = chat.Admins.Select(a => new UserPartialResponse(a, mainUserId)).ToList();
     MaxUsers = chat.MaxUsers;
     ChatName = chat.ChatName;
     CreatedAt = chat.CreatedAt;

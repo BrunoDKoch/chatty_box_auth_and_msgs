@@ -60,6 +60,39 @@ builder.Services.AddDbContext<ChattyBoxContext>(options => {
   options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
 });
 
+builder.Services.AddAuthorization();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => {
+  options.Events.OnMessageReceived = context => {
+    Console.ForegroundColor = ConsoleColor.Cyan;
+    Console.WriteLine("fired");
+    string? accessToken;
+    if (context.Request.Path.StartsWithSegments("/hub/messages")) {
+      accessToken = context.Request.Query["access_token"];
+    } else {
+      accessToken = context.Request.Headers.Authorization;
+    }
+    Console.WriteLine($"Access token: {accessToken}");
+    Console.WriteLine(context.Request.Path);
+    Console.ResetColor();
+    ArgumentNullException.ThrowIfNullOrEmpty(accessToken);
+    context.Token = accessToken;
+    return Task.CompletedTask;
+  };
+  var tokenOptions = builder.Configuration.GetSection("JsonWebToken");
+  options.TokenValidationParameters = new TokenValidationParameters {
+    ValidateIssuer = true,
+    ValidateAudience = true,
+    ValidateLifetime = false, // let service handle it
+    ValidateIssuerSigningKey = true,
+    ValidIssuer = tokenOptions.GetValue<string>("Issuer"),
+    ValidAudience = tokenOptions.GetValue<string>("Audience"),
+    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
+  };
+  options.SaveToken = true;
+  options.AutomaticRefreshInterval = TimeSpan.FromDays(1);
+});
+
 builder.Services.AddIdentity<User, Role>(options => {
   options.User.RequireUniqueEmail = true;
   options.User.AllowedUserNameCharacters = allowedLetters;
@@ -73,30 +106,6 @@ builder.Services.AddIdentity<User, Role>(options => {
   .AddTokenProvider<AuthenticatorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
   .AddTokenProvider<EmailTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
 
-builder.Services.AddAuthorization();
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => {
-  var tokenOptions = builder.Configuration.GetSection("JsonWebToken");
-  options.TokenValidationParameters = new TokenValidationParameters {
-    ValidateIssuer = true,
-    ValidateAudience = true,
-    ValidateLifetime = true,
-    ValidateIssuerSigningKey = true,
-    ValidIssuer = tokenOptions.GetValue<string>("Issuer"),
-    ValidAudience = tokenOptions.GetValue<string>("Audience"),
-    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
-  };
-  options.SaveToken = true;
-  options.AutomaticRefreshInterval = TimeSpan.FromMinutes(5);
-});
-
-builder.Services.AddCookiePolicy(options => {
-  options.Secure = CookieSecurePolicy.Always;
-  options.CheckConsentNeeded = o => false;
-  options.HttpOnly = HttpOnlyPolicy.Always;
-  options.MinimumSameSitePolicy = SameSiteMode.Lax;
-});
-
 var provider = builder.Environment.ContentRootFileProvider;
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
@@ -105,6 +114,7 @@ builder.Services.AddSingleton<IUserIdProvider, UserIdProvider>();
 builder.Services.AddImageSharp()
   .Configure<PhysicalFileSystemProviderOptions>(options => {
     options.ProviderRootPath = ".";
+    options.ProcessingBehavior = ProcessingBehavior.All;
   })
   .Configure<PhysicalFileSystemCacheOptions>(options => {
     options.CacheRootPath = "./";
@@ -124,12 +134,13 @@ if (app.Environment.IsDevelopment()) {
   IdentityModelEventSource.ShowPII = true;
 }
 
+
 app.UseExceptionHandler(exceptionHandler => {
   exceptionHandler.Run(async context => {
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
     context.Response.ContentType = MediaTypeNames.Application.Json;
     var ex = context.Features.Get<IExceptionHandlerPathFeature>();
-    if (ex != null)
+    if (ex is not null)
       await context.Response.WriteAsJsonAsync(new {
         status = context.Response.StatusCode,
         cause = "Internal server error",
@@ -137,6 +148,8 @@ app.UseExceptionHandler(exceptionHandler => {
       });
   });
 });
+
+app.UseHsts();
 
 app.UseHttpsRedirection();
 
@@ -152,9 +165,8 @@ app.UseAuthorization();
 
 app.UseImageSharp();
 
-app.UseEndpoints(endpoints => {
-  endpoints.MapControllers();
-  endpoints.MapHub<MessagesHub>("/hub/messages");
-});
+app.MapControllers();
+
+app.MapHub<MessagesHub>("/hub/messages");
 
 app.Run();

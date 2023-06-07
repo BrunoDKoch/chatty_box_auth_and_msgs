@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace ChattyBox.Hubs;
 
-[Authorize]
 public class MessagesHub : Hub {
   private List<string> _validLetters = ValidCharacters.GetLetters().Split().ToList();
 
@@ -102,7 +101,7 @@ public class MessagesHub : Hub {
           if (connection is null) continue;
           await AddToFriendsGroup(id, connection.ConnectionId);
         }
-        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new {id, status, online = true }, default);
+        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status, online = true }, default);
       },
       async () => await base.OnConnectedAsync()
     );
@@ -115,7 +114,7 @@ public class MessagesHub : Hub {
       }
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var relevantConnections = await _messagesDB.DeleteConnection(userId);
-      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new {id = userId, status = String.Empty, online = false }, default);
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = String.Empty, online = false }, default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
@@ -371,7 +370,7 @@ public class MessagesHub : Hub {
 
   // Status
   async public Task<string?> GetStatus() {
-    return await HandleException<string?>(async() => {
+    return await HandleException<string?>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
       ArgumentNullException.ThrowIfNull(user);
@@ -382,7 +381,7 @@ public class MessagesHub : Hub {
     return await HandleException<string?>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var result = await _userDB.UpdateStatus(userId, status);
-      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new {id = userId, status, online = true} , default);
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status, online = true }, default);
       return result;
     });
   }
@@ -490,8 +489,10 @@ public class MessagesHub : Hub {
         affectedUserId: userId
       );
       var connectionId = await _messagesDB.GetClientConnection(userId);
-      if (connectionId is not null)
+      if (connectionId is not null) {
+        await Clients.Client(connectionId.ConnectionId).SendAsync("addedToChat", chat, default);
         await Groups.AddToGroupAsync(connectionId.ConnectionId, chatId);
+      }
       await Clients.Caller.SendAsync("systemMessage", new SystemMessagePartial(systemMessage), default);
     });
   }
@@ -507,13 +508,15 @@ public class MessagesHub : Hub {
         affectedUserId: userId
       );
       var connectionId = await _messagesDB.GetClientConnection(userId);
-      if (connectionId is not null)
+      if (connectionId is not null) {
+        await Clients.Client(connectionId.ConnectionId).SendAsync("removedFromChat", chatId, default);
         await Groups.RemoveFromGroupAsync(connectionId.ConnectionId, chatId);
+      }
       await Clients.Group(chatId).SendAsync("systemMessage", new SystemMessagePartial(systemMessage), default);
     });
   }
-  async public Task LeaveChat(string chatId) {
-    await HandleException(async () => {
+  async public Task<string?> LeaveChat(string chatId) {
+    return await HandleException<string>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var systemMessage = await _messagesDB.CreateSystemMessage(
         instigatingUserId: userId,
@@ -523,6 +526,26 @@ public class MessagesHub : Hub {
       await _messagesDB.LeaveChat(userId, chatId);
       await Groups.RemoveFromGroupAsync(this.Context.ConnectionId, chatId);
       await Clients.Group(chatId).SendAsync("systemMessage", new SystemMessagePartial(systemMessage), default);
+      return chatId;
     });
+  }
+
+  // Add admins
+  async public Task<UserPartialResponse> AddAdmin(string userId, string chatId) {
+    var result = await HandleException<UserPartialResponse>(async () => {
+      string requestingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      User admin = await _messagesDB.AddAdminToChat(userId, requestingUserId, chatId);
+      SystemMessage systemMessage = await _messagesDB.CreateSystemMessage(
+        instigatingUserId: requestingUserId,
+        chatId,
+        affectedUserId: userId,
+        eventType: "added admin"
+      );
+      await Clients.Group(chatId).SendAsync("systemMessage", systemMessage, default);
+      if (admin.Connection is not null)
+        await Clients.Client(admin.Connection.ConnectionId).SendAsync("addedAsAdmin", chatId, default);
+      return new UserPartialResponse(admin, requestingUserId);
+    });
+    return result!;
   }
 }

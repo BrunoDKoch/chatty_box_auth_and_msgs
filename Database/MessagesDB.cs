@@ -265,7 +265,7 @@ public class MessagesDB {
     return new CompleteChatResponse(chat, requestingUserId);
   }
 
-  async public Task<CompleteChatResponse> AddUserToChat(string userId, string requestingUserId, string chatId) {
+  async public Task<ChatPreview> AddUserToChat(string userId, string requestingUserId, string chatId) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
@@ -276,23 +276,28 @@ public class MessagesDB {
     chat.Users.Add(user);
     ctx.Chats.Update(chat);
     await ctx.SaveChangesAsync();
-    return new CompleteChatResponse(chat, requestingUserId);
+    return new ChatPreview(chat, userId);
   }
 
-  async public Task<CompleteChatResponse> AddAdminToChat(string userId, string requestingUserId, string chatId) {
+  async public Task<User> AddAdminToChat(string userId, string requestingUserId, string chatId) {
     using var ctx = new ChattyBoxContext();
-    var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
+    var chat = await ctx.Chats
+      .Include(c => c.Users)
+      .Include(c => c.Admins)
+      .FirstOrDefaultAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
     if (!chat.Admins.Any(a => a.Id == requestingUserId))
       throw new ArgumentException("Must be an admin to add another admin");
     if (chat.Admins.Any(a => a.Id == userId))
       throw new ArgumentException("User is already an admin");
-    var user = await ctx.Users.FirstAsync(u => u.Id == userId);
+    var user = await ctx.Users
+      .Include(u => u.Connection)
+      .FirstAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     chat.Admins.Add(user);
     ctx.Chats.Update(chat);
     await ctx.SaveChangesAsync();
-    return new CompleteChatResponse(chat, requestingUserId);
+    return user;
   }
 
   async public Task LeaveChat(string userId, string chatId) {
@@ -343,7 +348,8 @@ public class MessagesDB {
 
   async public Task<List<string>?> DeleteConnection(string userId) {
     using var ctx = new ChattyBoxContext();
-    var connection = await ctx.ClientConnections.FirstAsync(c => c.UserId == userId);
+    var connection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+    ArgumentNullException.ThrowIfNull(connection);
     ctx.Remove(connection);
     await ctx.SaveChangesAsync();
     var userFriends = await ctx.Users

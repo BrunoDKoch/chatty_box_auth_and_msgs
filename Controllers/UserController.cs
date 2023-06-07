@@ -80,21 +80,7 @@ public class UserController : ControllerBase {
     return suspiciousLocation;
   }
 
-  async private Task<JwtSecurityToken> CreateAccessToken(User user) {
-    await _userManager.UpdateSecurityStampAsync(user);
-    var jwtSection = _configuration.GetSection("JsonWebToken")!;
-    var key = jwtSection.GetValue<string>("Key")!;
-    var issuer = jwtSection.GetValue<string>("Issuer")!;
-    var audience = jwtSection.GetValue<string>("Audience")!;
-    var claims = new List<Claim>();
-    claims.Add(new Claim(JwtRegisteredClaimNames.GivenName, user.UserName!));
-    claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email!));
-    claims.Add(new Claim(JwtRegisteredClaimNames.NameId, user.Id));
-    claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
-    claims.Add(new Claim("securityStamp", user.SecurityStamp!));
-    var token = new JwtSecurityToken(issuer, audience, claims, expires: DateTime.UtcNow.AddMinutes(30));
-    return token;
-  }
+  
 
   async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
     IPAddress ipAddress;
@@ -183,20 +169,28 @@ public class UserController : ControllerBase {
         return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
       };
       await _userManager.ResetAccessFailedCountAsync(user);
+
+      // Get claims
       var userClaims = await _userManager.GetClaimsAsync(user);
-      if (!userClaims.Any(c => c.Type == "stampExpiry")) {
-        var newClaim = new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString());
-        await _userManager.AddClaimAsync(user, newClaim);
-      }
+
+      // If stamp expiry exists, reset it
       if (
         userClaims.Any() &&
-        userClaims.Any(c => c.Type == "stampExpiry") &&
-        DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value) < DateTime.UtcNow
+        userClaims.Any(c => c.Type == "stampExpiry")
       ) {
         await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));
-        await _userManager.AddClaimAsync(user, new Claim("stampExpiry", DateTime.UtcNow.AddDays(30).ToString()));
       }
-      var token = TokenService.EncodeToken(await CreateAccessToken(user));
+
+      // Save new expiry (1 day if not set to remember, 30 otherwise)
+      await _userManager.AddClaimAsync(
+        user,
+        new Claim(
+          "stampExpiry",
+          DateTime.UtcNow.AddDays(data.Remember ? 30 : 1).ToString()
+        )
+      );
+
+      var token = TokenService.EncodeToken(await TokenService.CreateAccessToken(user, _userManager, _configuration));
       return Ok(new { token });
     } catch (Exception e) {
       Console.Error.WriteLine(e);
@@ -217,31 +211,7 @@ public class UserController : ControllerBase {
   [HttpGet("LoggedIn")]
   async public Task<IActionResult> CheckIfLoggedIn() {
     try {
-      // Get the token
-      var bearer = HttpContext.Request.Headers.Authorization.ToString();
-      if (bearer == null || String.IsNullOrEmpty(bearer)) return Ok(false);
-      var jwt = bearer.Replace("Bearer ", "");
-      var decodedJwt = TokenService.DecodeToken(jwt);
-
-      // Get user from id and check if user and expiry are ok
-      var id = decodedJwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.NameId);
-      var user = await _userManager.FindByIdAsync(id.Value);
-      ArgumentNullException.ThrowIfNull(user);
-      ArgumentNullException.ThrowIfNull(decodedJwt.Payload.Exp);
-
-      // Check token expiry and security stamp expiry
-      var userClaims = await _userManager.GetClaimsAsync(user);
-      var expiry = DateTimeOffset.FromUnixTimeMilliseconds((int)decodedJwt.Payload.Exp);
-      var stampExpiry = DateTime.Parse(userClaims.First(c => c.Type == "stampExpiry").Value);
-
-      // Throw error if stamp is expired
-      if (stampExpiry < DateTime.UtcNow) throw new InvalidOperationException();
-
-      // If the token itself is expired but stamp is fine, send new token
-      string token;
-      if (expiry < DateTime.UtcNow)
-        token = TokenService.EncodeToken(await CreateAccessToken(user));
-      else token = jwt;
+      var token = await TokenService.GetCurrentToken(HttpContext, _userManager, _configuration);
       return Ok(
         new { token }
       );
