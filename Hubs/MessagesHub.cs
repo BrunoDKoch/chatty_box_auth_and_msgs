@@ -96,7 +96,9 @@ public class MessagesHub : Hub {
     await HandleException(
       async () => {
         var id = EnsureUserIdNotNull(this.Context.UserIdentifier);
-        var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, this.Context.GetHttpContext());
+        var httpContext = this.Context.GetHttpContext();
+        ArgumentNullException.ThrowIfNull(httpContext);
+        var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
         // Create a group to send messages to all of a client's connected devices
         await Groups.AddToGroupAsync(this.Context.ConnectionId, $"{id}_connections", default);
         var friends = await _userDB.GetAnUsersFriends(id);
