@@ -221,7 +221,10 @@ public class MessagesDB {
   async public Task<List<ClientConnection>> GetAllConnectionsToChat(string chatId) {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).FirstAsync(c => c.Id == chatId);
-    var connections = await ctx.ClientConnections.Include(c => c.User).Where(c => chat.Users.Contains(c.User)).ToListAsync();
+    var connections = await ctx.ClientConnections
+      .Include(c => c.User)
+      .Where(c => c.Active && chat.Users.Contains(c.User))
+      .ToListAsync();
     return connections;
   }
 
@@ -338,7 +341,7 @@ public class MessagesDB {
     using var ctx = new ChattyBoxContext();
     var chat = await ctx.Chats.Include(c => c.Users).Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     ArgumentNullException.ThrowIfNull(chat);
-    if (chat.IsGroupChat) throw new InvalidOperationException("Cannot add users to private chat");
+    if (!chat.IsGroupChat) throw new InvalidOperationException("Cannot add users to private chat");
     if (!chat.Admins.Any(a => a.Id == requestingUserId))
       throw new ArgumentException("User is not an admin");
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);

@@ -337,7 +337,8 @@ public class MessagesHub : Hub {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
       foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
-        await Clients.Client(connection.ConnectionId).SendAsync("newChat", chat, default);
+        await Groups.AddToGroupAsync(connection.ConnectionId, chat.Id, default);
+        await Clients.Group(chat.Id).SendAsync("newChat", chat, default);
       }
     });
   }
