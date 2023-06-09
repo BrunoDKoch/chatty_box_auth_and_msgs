@@ -45,10 +45,10 @@ public class UserDB {
   // Read
   async public Task<List<User>> GetAnUsersFriends(string userId) {
     var user = await _userManager.Users
-      .Include(u => u.Friends.Where(f => f.ClientConnections.Any() && f.ClientConnections.Any(c => c.Active)))
-        .ThenInclude(f => f.ClientConnections.Where(c => c.Active))
-      .Include(u => u.IsFriendsWith.Where(f => f.ClientConnections.Any() && f.ClientConnections.Any(c => c.Active)))
-        .ThenInclude(f => f.ClientConnections.Where(c => c.Active))
+      .Include(u => u.Friends)
+        .ThenInclude(f => f.ClientConnections)
+      .Include(u => u.IsFriendsWith)
+        .ThenInclude(f => f.ClientConnections)
       .FirstAsync(u => u.Id == userId);
     List<User> userFriends = new List<User>();
     userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();

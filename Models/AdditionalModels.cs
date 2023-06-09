@@ -250,6 +250,9 @@ public class FriendsResponse : UserPartialResponse {
   public FriendsResponse(User user, bool isOnline, string requestingUserId) : base(user, requestingUserId) {
     IsOnline = isOnline;
   }
+  public FriendsResponse(User user, string requestingUserId) : base(user, requestingUserId) {
+    IsOnline = user.ClientConnections.Any(c => c.Active);
+  }
   public bool IsOnline { get; set; }
 }
 

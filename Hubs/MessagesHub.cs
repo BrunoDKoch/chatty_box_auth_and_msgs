@@ -41,9 +41,9 @@ public class MessagesHub : Hub {
     return userId;
   }
 
-  async private Task AddToFriendsGroup(string userId, List<ClientConnection> clientConnections) {
-    foreach (var clientConnection in clientConnections)
-      await Groups.AddToGroupAsync(clientConnection.ConnectionId, $"{userId}_friends", default);
+  async private Task AddToFriendsGroup(string userId, List<string> clientConnectionIds) {
+    foreach (var clientConnection in clientConnectionIds)
+      await Groups.AddToGroupAsync(clientConnection, $"{userId}_friends", default);
   }
 
   async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null, ExceptionActionType actionType = ExceptionActionType.OTHER) {
@@ -103,11 +103,18 @@ public class MessagesHub : Hub {
         await Groups.AddToGroupAsync(this.Context.ConnectionId, $"{id}_connections", default);
         var friends = await _userDB.GetAnUsersFriends(id);
         var status = await GetStatus();
-        await Clients.Caller.SendAsync("friends", friends.Select(f => new FriendsResponse(f, true, id)), default);
-        foreach (var friend in friends) {
-          await AddToFriendsGroup(id, friend.ClientConnections.ToList());
-        }
-        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status, online = true }, default);
+        await this.GetChatPreviews();
+        await this.GetFriends(status);
+        await this.GetFriendRequests();
+        await this.GetNotificationSettings();
+        await this.GetBlockedUsers();
+        await Clients.Caller.SendAsync(
+          "friends",
+          friends.Select(f => new FriendsResponse(f, id)),
+          default
+        );
+
+
       },
       async () => await base.OnConnectedAsync()
     );
@@ -121,18 +128,10 @@ public class MessagesHub : Hub {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _messagesDB.MarkConnectionAsInactive(userId, this.Context.ConnectionId);
       await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = String.Empty, online = false }, default);
+      await Groups.RemoveFromGroupAsync(this.Context.ConnectionId, $"{userId}_connections", default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
-  }
-
-  // Start up
-  async public Task InitialCall() {
-    await this.GetChatPreviews();
-    await this.GetFriends();
-    await this.GetFriendRequests();
-    await this.GetNotificationSettings();
-    await this.GetBlockedUsers();
   }
 
   async public Task GetCallerInfo() {
@@ -240,11 +239,20 @@ public class MessagesHub : Hub {
   }
 
   // Friends logic
-  async public Task GetFriends() {
+  async public Task GetFriends(string? status) {
     await HandleException(async () => {
-      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var friends = await _userDB.GetAnUsersFriends(userId);
-      await Clients.Caller.SendAsync("friends", friends, default);
+      var id = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var friends = await _userDB.GetAnUsersFriends(id);
+      await Clients.Caller.SendAsync(
+        "friends",
+        friends.Select(f => new FriendsResponse(f, id)),
+        default
+      );
+      foreach (var friend in friends) {
+        await AddToFriendsGroup(id, friend.ClientConnections.Select(c => c.ConnectionId).ToList());
+        await AddToFriendsGroup(friend.Id, new List<string> { this.Context.ConnectionId });
+      }
+      await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status, online = true }, default);
     });
   }
 
@@ -290,8 +298,8 @@ public class MessagesHub : Hub {
       if (accept) {
         var connection = await _messagesDB.GetClientConnections(addingId);
         if (connection is not null) {
-          await AddToFriendsGroup(userId, connection);
-          await AddToFriendsGroup(addingId, user.ClientConnections.ToList());
+          await AddToFriendsGroup(userId, connection.Select(c => c.ConnectionId).ToList());
+          await AddToFriendsGroup(addingId, user.ClientConnections.Select(c => c.ConnectionId).ToList());
           await Clients.Group($"{addingId}_connections").SendAsync("newFriend", response, default);
         }
         await Clients.Group($"{userId}_connections").SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
