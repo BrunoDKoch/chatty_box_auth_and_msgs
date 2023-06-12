@@ -60,39 +60,6 @@ builder.Services.AddDbContext<ChattyBoxContext>(options => {
   options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
 });
 
-builder.Services.AddAuthorization();
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => {
-  options.Events.OnMessageReceived = context => {
-    Console.ForegroundColor = ConsoleColor.Cyan;
-    Console.WriteLine("fired");
-    string? accessToken;
-    if (context.Request.Path.StartsWithSegments("/hub/messages")) {
-      accessToken = context.Request.Query["access_token"];
-    } else {
-      accessToken = context.Request.Headers.Authorization;
-    }
-    Console.WriteLine($"Access token: {accessToken}");
-    Console.WriteLine(context.Request.Path);
-    Console.ResetColor();
-    ArgumentNullException.ThrowIfNullOrEmpty(accessToken);
-    context.Token = accessToken;
-    return Task.CompletedTask;
-  };
-  var tokenOptions = builder.Configuration.GetSection("JsonWebToken");
-  options.TokenValidationParameters = new TokenValidationParameters {
-    ValidateIssuer = true,
-    ValidateAudience = true,
-    ValidateLifetime = false, // let service handle it
-    ValidateIssuerSigningKey = true,
-    ValidIssuer = tokenOptions.GetValue<string>("Issuer"),
-    ValidAudience = tokenOptions.GetValue<string>("Audience"),
-    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.GetValue<string>("Key")!))
-  };
-  options.SaveToken = true;
-  options.AutomaticRefreshInterval = TimeSpan.FromDays(1);
-});
-
 builder.Services.AddIdentity<User, Role>(options => {
   options.User.RequireUniqueEmail = true;
   options.User.AllowedUserNameCharacters = allowedLetters;
@@ -106,10 +73,22 @@ builder.Services.AddIdentity<User, Role>(options => {
   .AddTokenProvider<AuthenticatorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
   .AddTokenProvider<EmailTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
 
+builder.Services.AddAuthorization();
+
+builder.Services.ConfigureApplicationCookie(options => {
+  options.Cookie.Path = "/";
+  options.LoginPath = "/User/LoggedIn";
+  options.LogoutPath = "/User/Logout";
+  options.ExpireTimeSpan = TimeSpan.FromDays(14);
+  options.SlidingExpiration = true;
+  if (!builder.Environment.IsDevelopment())
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
+
 var provider = builder.Environment.ContentRootFileProvider;
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
-builder.Services.AddSingleton<IUserIdProvider, UserIdProvider>();
+//builder.Services.AddSingleton<IUserIdProvider, UserIdProvider>();
 
 builder.Services.AddImageSharp()
   .Configure<PhysicalFileSystemProviderOptions>(options => {
@@ -140,12 +119,21 @@ app.UseExceptionHandler(exceptionHandler => {
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
     context.Response.ContentType = MediaTypeNames.Application.Json;
     var ex = context.Features.Get<IExceptionHandlerPathFeature>();
-    if (ex is not null)
+    if (ex is not null) {
+      if (context.Request.Path.Value == "/User/Login") {
+        await context.Response.WriteAsJsonAsync(new {
+          status = 403,
+          cause = "Unauthorized",
+          message = "Invalid credentials"
+        });
+        return;
+      }
       await context.Response.WriteAsJsonAsync(new {
         status = context.Response.StatusCode,
         cause = "Internal server error",
-        message = ex.Error.Message 
+        message = ex.Error.Message
       });
+    }
   });
 });
 

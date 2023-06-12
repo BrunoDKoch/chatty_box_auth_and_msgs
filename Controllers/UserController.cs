@@ -18,6 +18,7 @@ using UAParser;
 namespace ChattyBox.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("[controller]")]
 public class UserController : ControllerBase {
   public IPasswordHasher<User> hasher = new PasswordHasher<User>();
@@ -72,7 +73,7 @@ public class UserController : ControllerBase {
     return suspiciousLocation;
   }
 
-  
+
 
   async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
     IPAddress ipAddress;
@@ -102,6 +103,7 @@ public class UserController : ControllerBase {
   }
 
   // Auth
+  [AllowAnonymous]
   [HttpPost("Register")]
   async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
@@ -118,6 +120,7 @@ public class UserController : ControllerBase {
     return Ok(otp);
   }
 
+  [AllowAnonymous]
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
     var user = await _userManager.FindByEmailAsync(data.Email);
@@ -161,58 +164,51 @@ public class UserController : ControllerBase {
         return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
       };
       await _userManager.ResetAccessFailedCountAsync(user);
-
-      // Get claims
-      var userClaims = await _userManager.GetClaimsAsync(user);
-
-      // If stamp expiry exists, reset it
-      if (
-        userClaims.Any() &&
-        userClaims.Any(c => c.Type == "stampExpiry")
-      ) {
-        await _userManager.RemoveClaimsAsync(user, userClaims.Where(c => c.Type == "stampExpiry"));
-      }
-
-      // Save new expiry (1 day if not set to remember, 30 otherwise)
-      await _userManager.AddClaimAsync(
-        user,
-        new Claim(
-          "stampExpiry",
-          DateTime.UtcNow.AddDays(data.Remember ? 30 : 1).ToString()
-        )
-      );
-
-      var token = TokenService.EncodeToken(await TokenService.CreateAccessToken(user, _userManager, _configuration));
-      return Ok(new { token });
+      return StatusCode(StatusCodes.Status302Found);
     } catch (Exception e) {
       Console.Error.WriteLine(e);
       return Unauthorized();
     }
   }
 
+  [HttpGet("Login")]
+  async public Task<IActionResult> RefreshLogin([FromQuery] string? ReturnUrl) {
+    var userClaim = HttpContext.User;
+    var user = await _userManager.GetUserAsync(userClaim);
+    ArgumentNullException.ThrowIfNull(user);
+    await _signInManager.RefreshSignInAsync(user);
+    if (!String.IsNullOrEmpty(ReturnUrl)) return Redirect(ReturnUrl);
+    return Ok();
+  }
+
   [HttpHead("Logout")]
-  async public Task<IActionResult> LogOut() {
+  async public Task<IActionResult> LogOut([FromQuery] bool invalidateAllSessions = false) {
     var userClaim = HttpContext.User;
     if (userClaim == null) return BadRequest();
     var user = await _userManager.GetUserAsync(userClaim);
     if (user == null) return BadRequest();
     await _signInManager.SignOutAsync();
+    if (invalidateAllSessions) await _userManager.UpdateSecurityStampAsync(user);
     return SignOut();
   }
 
   [HttpGet("LoggedIn")]
   async public Task<IActionResult> CheckIfLoggedIn() {
     try {
-      var token = await TokenService.GetCurrentToken(HttpContext, _userManager, _configuration);
-      return Ok(
-        new { token }
-      );
+      var userClaim = HttpContext.User;
+      ArgumentNullException.ThrowIfNull(userClaim);
+      if (_signInManager.IsSignedIn(userClaim)) return Ok(true);
+      var user = await _userManager.GetUserAsync(userClaim);
+      ArgumentNullException.ThrowIfNull(user);
+      await _signInManager.RefreshSignInAsync(user);
+      return Ok(_signInManager.IsSignedIn(userClaim));
     } catch (Exception e) {
       Console.Error.WriteLine(e);
       return Unauthorized();
     }
   }
 
+  [AllowAnonymous]
   [HttpPost("Validate/Email")]
   async public Task<IActionResult> ValidateEmail([FromBody] EmailValidationRequest request) {
     try {
@@ -223,6 +219,7 @@ public class UserController : ControllerBase {
       var valid = otpClaim != null && otpClaim.Value == request.Code;
       if (!valid) return Unauthorized("Invalid code");
       user.EmailConfirmed = true;
+      await _signInManager.SignInAsync(user, false);
       await _userManager.RemoveClaimAsync(user, user.UserClaims.First(u => u.ClaimType == "OTP").ToClaim());
       return Ok();
     } catch (Exception e) {
@@ -234,6 +231,7 @@ public class UserController : ControllerBase {
   }
 
   // Verify location after alert
+  [AllowAnonymous]
   [HttpPost("Validate/Location")]
   async public Task<IActionResult> ValidadeLocation([FromBody] LocationValidationRequest request) {
     var user = await _userManager.FindByEmailAsync(request.Email);
@@ -249,6 +247,7 @@ public class UserController : ControllerBase {
     return Ok();
   }
 
+  [AllowAnonymous]
   [HttpPost("Recovery")]
   async public Task<IActionResult> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
     var user = await _userManager.FindByEmailAsync(request.Email);
@@ -258,6 +257,7 @@ public class UserController : ControllerBase {
     return Ok(token);
   }
 
+  [AllowAnonymous]
   [HttpPut("Recovery")]
   async public Task<IActionResult> RecoverPassword([FromBody] PasswordResetRequest request) {
     var user = await _userManager.FindByEmailAsync(request.Email);
@@ -268,7 +268,6 @@ public class UserController : ControllerBase {
   }
 
   // Images
-  [Authorize]
   [HttpPost("Avatar")]
   async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
@@ -279,7 +278,6 @@ public class UserController : ControllerBase {
     return Ok(avatar);
   }
 
-  [Authorize]
   [HttpDelete("Avatar")]
   async public Task<IActionResult> DeleteAvatar() {
     var user = await _userManager.GetUserAsync(HttpContext.User);
@@ -291,7 +289,6 @@ public class UserController : ControllerBase {
     return Ok();
   }
 
-  [Authorize]
   [HttpPost("Upload/{chatId}")]
   async public Task<IActionResult> UploadImage(string chatId, [FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);

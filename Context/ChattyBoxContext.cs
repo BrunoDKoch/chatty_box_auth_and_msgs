@@ -181,6 +181,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
     modelBuilder.Entity<User>(entity => {
       entity.Property(e => e.PrivacyLevel).HasDefaultValueSql("((1))");
       entity.Property(e => e.ShowStatus).HasDefaultValueSql("((1))");
+      entity.Property(e => e.PasswordHash).IsRequired();
       entity.HasMany(d => d.Roles).WithMany(p => p.Users)
         .UsingEntity<UserRole>(
           r => r.HasOne<Role>().WithMany()
