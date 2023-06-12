@@ -79,7 +79,7 @@ public class CompleteChatResponse {
   public string? ChatName { get; set; }
   public bool UserIsAdmin { get; set; }
   public DateTime CreatedAt { get; set; }
-  public ICollection<UserPartialResponse> Admins {get; set;}  = new List<UserPartialResponse>();
+  public ICollection<UserPartialResponse> Admins { get; set; } = new List<UserPartialResponse>();
   public ICollection<UserPartialResponse> Users { get; set; } = new List<UserPartialResponse>();
   public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
   public ICollection<SystemMessagePartial> SystemMessages { get; set; } = new List<SystemMessagePartial>();
@@ -313,4 +313,29 @@ public enum ExceptionActionType {
 public class MessageReadInformationResponse {
   public ReadMessagePartialResponse ReadMessage { get; set; } = null!;
   public List<string>? ConnectionIds { get; set; } = null!;
+}
+
+public class ClientConnectionPartialInfo {
+  public string Browser;
+  public string CityName;
+  public string CountryIsoCode;
+  public string CountryName;
+  public string Device;
+  public string GeoNameId;
+  public string IpAddress;
+  public string Os;
+  public bool Active;
+  public DateTime CreatedAt;
+  public ClientConnectionPartialInfo(ClientConnection connection) {
+    Browser = connection.Browser;
+    CityName = connection.CityName;
+    CountryIsoCode = connection.CountryIsoCode;
+    CountryName = connection.CountryName;
+    Device = connection.Device;
+    GeoNameId = connection.GeoNameId;
+    IpAddress = connection.IpAddress;
+    Os = connection.Os;
+    Active = connection.Active;
+    CreatedAt = connection.CreatedAt;
+  }
 }

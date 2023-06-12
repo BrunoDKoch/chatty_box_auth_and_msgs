@@ -447,6 +447,15 @@ public class MessagesHub : Hub {
     });
   }
 
+  async public Task<List<ClientConnectionPartialInfo>> GetConnections() {
+    var result = await HandleException<List<ClientConnectionPartialInfo>>(async() => {
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var connections = await _messagesDB.GetClientConnections(userId);
+      return connections.Select(c => new ClientConnectionPartialInfo(c)).ToList();
+    });
+    return result ?? new List<ClientConnectionPartialInfo>();
+  }
+
   // Privacy
   async public Task SetPrivacySettings(int privacyLevel) {
     await HandleException(async () => {

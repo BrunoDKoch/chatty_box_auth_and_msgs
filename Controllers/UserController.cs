@@ -102,6 +102,28 @@ public class UserController : ControllerBase {
     return loginAttempt;
   }
 
+  async private Task<UserLoginAttempt?> VerifyLoginAttempt(UserLoginAttempt loginAttempt, User user, LogInInfo data, bool suspiciousLocation) {
+    // Handle login attempt from suspicious location
+    if (suspiciousLocation) {
+      var newLocationVerification = new Random().Next(100000, 999999).ToString();
+      var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
+      await _userManager.AddClaimAsync(user, newLocationVerificationClaim);
+      loginAttempt.Success = false;
+      return loginAttempt;
+    }
+    var signInSuccess = await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
+    // Check if requires 2FA (will return false if device is remembered)
+    if (signInSuccess.RequiresTwoFactor) {
+      // If yes, but no code is given, return status 400
+      if (data.MFACode == null || String.IsNullOrEmpty(data.MFACode)) return null;
+      signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
+      await _userManager.ResetAccessFailedCountAsync(user);
+    }
+
+    loginAttempt.Success = signInSuccess.Succeeded;
+    return loginAttempt;
+  }
+
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
@@ -130,35 +152,19 @@ public class UserController : ControllerBase {
       var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
 
       var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
-
       string failureReason = "invalid credentials";
 
-      // Handle login attempt from suspicious location
-      if (suspiciousLocation) {
-        var newLocationVerification = new Random().Next(100000, 999999).ToString();
-        var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
-        await _userManager.AddClaimAsync(user, newLocationVerificationClaim);
-        loginAttempt.Success = false;
-      } else {
-        var signInSuccess = await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
-        // Check if requires 2FA (will return false if device is remembered)
-        if (signInSuccess.RequiresTwoFactor) {
-          // If yes, but no code is given, return status 400
-          if (data.MFACode == null || String.IsNullOrEmpty(data.MFACode)) return BadRequest();
-          signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
-          await _userManager.ResetAccessFailedCountAsync(user);
-        }
-        // Tell the user if their account is locked out
-        if (signInSuccess.IsLockedOut) {
-          if (user.LockoutEnd != DateTime.MaxValue)
-            failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
-          else failureReason = "account suspended indefinitely";
-        };
-        loginAttempt.Success = signInSuccess.Succeeded;
-      }
+      loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
+      if (loginAttempt is null) return BadRequest();
       using var ctx = new ChattyBoxContext();
       await ctx.UserLoginAttempts.AddAsync(loginAttempt);
       await ctx.SaveChangesAsync();
+      // Tell the user if their account is locked out
+      if (await _userManager.IsLockedOutAsync(user)) {
+        if (user.LockoutEnd != DateTime.MaxValue)
+          failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
+        else failureReason = "account suspended indefinitely";
+      };
       if (!loginAttempt.Success) {
         await _userManager.AccessFailedAsync(user);
         return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
