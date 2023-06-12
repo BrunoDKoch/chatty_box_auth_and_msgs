@@ -88,7 +88,6 @@ builder.Services.ConfigureApplicationCookie(options => {
 var provider = builder.Environment.ContentRootFileProvider;
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
-//builder.Services.AddSingleton<IUserIdProvider, UserIdProvider>();
 
 builder.Services.AddImageSharp()
   .Configure<PhysicalFileSystemProviderOptions>(options => {
