@@ -316,6 +316,8 @@ public class MessageReadInformationResponse {
 }
 
 public class ClientConnectionPartialInfo {
+  public string UserId;
+  public string ConnectionId;
   public string Browser;
   public string CityName;
   public string CountryIsoCode;
@@ -327,6 +329,8 @@ public class ClientConnectionPartialInfo {
   public bool Active;
   public DateTime CreatedAt;
   public ClientConnectionPartialInfo(ClientConnection connection) {
+    UserId = connection.UserId;
+    ConnectionId = connection.ConnectionId;
     Browser = connection.Browser;
     CityName = connection.CityName;
     CountryIsoCode = connection.CountryIsoCode;
@@ -337,5 +341,34 @@ public class ClientConnectionPartialInfo {
     Os = connection.Os;
     Active = connection.Active;
     CreatedAt = connection.CreatedAt;
+  }
+}
+
+public class UserConnectionCallInfo {
+  public string Id;
+  public string? Avatar;
+  public string UserName;
+  public string Email;
+  public List<FriendsResponse> Friends;
+  public List<FriendRequestFiltered> FriendRequests;
+  public List<UserPartialResponse> Blocks;
+  public List<ChatPreview> Previews;
+  public UserConnectionCallInfo(User user) {
+    Id = user.Id;
+    Avatar = user.Avatar;
+    UserName = user.UserName!;
+    Email = user.Email!;
+    Friends =
+      user.Friends.Select(f => new FriendsResponse(f, Id)).ToList()
+      .Concat(user.IsFriendsWith.Select(f => new FriendsResponse(f, f.ClientConnections.Any(c => c.Active), Id)).ToList())
+      .ToList();
+    FriendRequests = user.FriendRequestsReceived.Select(fr => new FriendRequestFiltered {
+      UserAdding = new UserPartialResponse(fr.UserAdding, Id)
+    }).ToList();
+    Blocks = user.Blocking.Select(b => new UserPartialResponse(b)).ToList();
+    Previews = user.Chats
+      .Select(c => new ChatPreview(c, Id))
+      .OrderByDescending(c => c.LastMessage is null ? c.CreatedAt : c.LastMessage.SentAt)
+      .ToList();
   }
 }

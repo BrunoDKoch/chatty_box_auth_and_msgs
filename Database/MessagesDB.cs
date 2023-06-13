@@ -87,6 +87,7 @@ public class MessagesDB {
     var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context, geoData);
     if (existingConnection != null) {
       existingConnection.ConnectionId = connectionId;
+      existingConnection.Active = true;
       await ctx.SaveChangesAsync();
       return existingConnection;
     }
@@ -95,6 +96,7 @@ public class MessagesDB {
     var clientConnection = new ClientConnection {
       UserId = userId,
       ConnectionId = connectionId,
+      Active = true,
       IpAddress = iPAddress.ToString(),
       CityName = geoData.City.Name ?? "unknown",
       GeoNameId = geoData.City.GeoNameId != null ? geoData.City.GeoNameId.ToString()! : "unknown",
@@ -107,7 +109,7 @@ public class MessagesDB {
       Browser = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}",
       CreatedAt = DateTime.UtcNow
     };
-  await ctx.ClientConnections.AddAsync(clientConnection);
+    await ctx.ClientConnections.AddAsync(clientConnection);
     await ctx.SaveChangesAsync();
     return clientConnection;
   }

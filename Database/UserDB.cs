@@ -43,6 +43,27 @@ public class UserDB {
   }
 
   // Read
+  async public Task<User> GetPreliminaryConnectionCallInfo(string userId) {
+    var user = await _userManager.Users
+      .Include(u => u.Friends)
+        .ThenInclude(f => f.ClientConnections)
+      .Include(u => u.IsFriendsWith)
+        .ThenInclude(f => f.ClientConnections)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Messages)
+          .ThenInclude(m => m.From)
+      .Include(c => c.Chats)
+        .ThenInclude(c => c.SystemMessages)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Messages)
+          .ThenInclude(m => m.ReadBy)
+      .Include(u => u.Blocking)
+      .Include(u => u.FriendRequestsReceived)
+      .FirstOrDefaultAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
+    return user;
+  }
+
   async public Task<List<User>> GetAnUsersFriends(string userId) {
     var user = await _userManager.Users
       .Include(u => u.Friends)

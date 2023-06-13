@@ -115,20 +115,20 @@ public class MessagesHub : Hub {
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
         // Create a group to send messages to all of a client's connected devices
         await Groups.AddToGroupAsync(this.Context.ConnectionId, $"{id}_connections", default);
-        var friends = await _userDB.GetAnUsersFriends(id);
-        var status = await GetStatus();
-        await this.GetChatPreviews();
-        await this.GetFriends(status);
-        await this.GetFriendRequests();
-        await this.GetNotificationSettings();
-        await this.GetBlockedUsers();
-        await Clients.Caller.SendAsync(
-          "friends",
-          friends.Select(f => new FriendsResponse(f, id)),
-          default
-        );
+        var user = await _userDB.GetPreliminaryConnectionCallInfo(id);
 
+        // Add to friend groups
+        var friends =
+          user.Friends.Concat(user.IsFriendsWith).ToList();
+        foreach (var friend in friends) {
+          if (friend.ClientConnections.Count == 0) continue;
+          await AddToFriendsGroup(id, friend.ClientConnections.Select(c => c.ConnectionId).ToList());
+          await AddToFriendsGroup(friend.Id, new List<string> { this.Context.ConnectionId });
+        }
+        // Inform friends of connection
+        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status = user.Status, online = true }, default);
 
+        await Clients.Caller.SendAsync("connectionInfo", new UserConnectionCallInfo(user), default);
       },
       async () => await base.OnConnectedAsync()
     );
@@ -461,7 +461,7 @@ public class MessagesHub : Hub {
   }
 
   async public Task<List<ClientConnectionPartialInfo>> GetConnections() {
-    var result = await HandleException<List<ClientConnectionPartialInfo>>(async() => {
+    var result = await HandleException<List<ClientConnectionPartialInfo>>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var connections = await _messagesDB.GetClientConnections(userId);
       return connections.Select(c => new ClientConnectionPartialInfo(c)).ToList();
