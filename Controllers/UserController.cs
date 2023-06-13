@@ -117,8 +117,12 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
     var result = await _userManager.CreateAsync(createdUser);
-    if (result.Errors.Count() > 0)
-      return Conflict($"{result.Errors.First().Code} - {result.Errors.First().Description}");
+    if (result.Errors.Count() > 0) {
+      var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
+      if (duplicateErrors is null || duplicateErrors.Count == 0)
+        return Unauthorized(string.Join("\n", result.Errors.Select(e => e.Description)));
+      return Conflict(string.Join("\n", result.Errors.Select(e => e.Description)));
+    }
     foreach (var err in result.Errors) {
       Console.WriteLine(err);
     }
