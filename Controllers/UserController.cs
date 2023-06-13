@@ -47,19 +47,6 @@ public class UserController : ControllerBase {
     _hubContext = hubContext;
   }
 
-  private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double R = 6371; // Radius of the Earth in km
-    var dLat = ToRadians(lat2 - lat1);
-    var dLon = ToRadians(lon2 - lon1);
-    var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-    var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-    var distance = R * c; // Distance in km
-    return distance;
-  }
-
-  private static double ToRadians(double degrees) {
-    return degrees * Math.PI / 180;
-  }
 
   async private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
     using var ctx = new ChattyBoxContext();
@@ -68,7 +55,7 @@ public class UserController : ControllerBase {
       .Any(
         l =>
           l.Success &&
-          CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
+          DistanceService.CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
       );
     return suspiciousLocation;
   }
@@ -130,7 +117,8 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
     var result = await _userManager.CreateAsync(createdUser);
-    if (result.Errors.Count() > 0) return Conflict();
+    if (result.Errors.Count() > 0)
+      return Conflict($"{result.Errors.First().Code} - {result.Errors.First().Description}");
     foreach (var err in result.Errors) {
       Console.WriteLine(err);
     }

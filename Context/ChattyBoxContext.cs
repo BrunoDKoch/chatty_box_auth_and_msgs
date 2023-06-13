@@ -64,9 +64,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   protected override void OnModelCreating(ModelBuilder modelBuilder) {
 
     modelBuilder.Entity<ClientConnection>(entity => {
-      entity.HasKey(e => new { e.UserId, e.ConnectionId }).HasName("ClientConnection_pkey");
+      entity.HasKey(e => e.Id).HasName("ClientConnection_pkey");
 
+      entity.Property(e => e.Active).HasDefaultValueSql("((1))");
       entity.Property(e => e.Browser).HasDefaultValueSql("('unknown')");
+      entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
       entity.Property(e => e.Device).HasDefaultValueSql("('unknown')");
       entity.Property(e => e.Os).HasDefaultValueSql("('unknown')");
 

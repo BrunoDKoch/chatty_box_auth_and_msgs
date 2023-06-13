@@ -3,17 +3,22 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
+using MaxMind.GeoIP2.Responses;
+using UAParser;
 
 namespace ChattyBox.Models;
 
-[PrimaryKey("UserId", "ConnectionId")]
 [Table("ClientConnection")]
 public partial class ClientConnection {
   [Key]
+  [Column("id")]
+  [StringLength(1000)]
+  public string Id { get; set; } = Guid.NewGuid().ToString();
+
   [Column("userId")]
   public string UserId { get; set; } = null!;
 
-  [Key]
   [Column("connectionId")]
   [StringLength(1000)]
   public string ConnectionId { get; set; } = null!;

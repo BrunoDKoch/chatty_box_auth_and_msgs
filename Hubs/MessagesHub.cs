@@ -47,8 +47,21 @@ public class MessagesHub : Hub {
       await Groups.AddToGroupAsync(clientConnection, $"{userId}_friends", default);
   }
 
-  async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null, ExceptionActionType actionType = ExceptionActionType.OTHER) {
+  async private Task SendErrorMessage(ExceptionActionType actionType, Exception exception) {
     string errorToSend = actionType == ExceptionActionType.MESSAGE ? "msgError" : "error";
+    string message;
+    switch (exception) {
+      case Microsoft.Data.SqlClient.SqlException sqlException:
+        message = $"Database error {sqlException.Number}";
+        break;
+      default:
+        message = exception.Message;
+        break;
+    }
+    await Clients.Caller.SendAsync(errorToSend, message, default);
+  }
+
+  async private Task HandleException(Func<Task> action, Func<Task>? finalAction = null, ExceptionActionType actionType = ExceptionActionType.OTHER) {
     if (finalAction is null) {
       try {
         await action();
@@ -56,7 +69,7 @@ public class MessagesHub : Hub {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        await Clients.Caller.SendAsync(errorToSend, e.Message, default);
+        await SendErrorMessage(actionType, e);
       }
     } else {
       try {
@@ -65,7 +78,7 @@ public class MessagesHub : Hub {
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.Error.WriteLine(e);
         Console.ForegroundColor = ConsoleColor.White;
-        await Clients.Caller.SendAsync(errorToSend, e.Message, default);
+        await SendErrorMessage(actionType, e);
       } finally {
         await finalAction();
       }
@@ -80,7 +93,7 @@ public class MessagesHub : Hub {
       Console.ForegroundColor = ConsoleColor.DarkRed;
       Console.Error.WriteLine(e);
       Console.ForegroundColor = ConsoleColor.White;
-      await Clients.Caller.SendAsync("error", e.Message, default);
+      await SendErrorMessage(ExceptionActionType.OTHER, e);
       return default(T);
     }
   }

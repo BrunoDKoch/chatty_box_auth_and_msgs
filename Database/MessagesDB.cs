@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using UAParser;
 using MaxMind.GeoIP2;
 using System.Net;
+using MaxMind.GeoIP2.Responses;
 
 namespace ChattyBox.Database;
 
@@ -37,7 +38,13 @@ public class MessagesDB {
     await ctx.SaveChangesAsync();
   }
 
-  async private Task<ClientConnection?> CheckExistingConnection(ChattyBoxContext ctx, string userId, string connectionId, HttpContext context) {
+  async private Task<ClientConnection?> CheckExistingConnection(
+    ChattyBoxContext ctx,
+    string userId,
+    string connectionId,
+    HttpContext context,
+    CityResponse geoData
+  ) {
     IPAddress iPAddress;
     if (context.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(context.Connection.RemoteIpAddress.ToString())) {
       iPAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
@@ -45,13 +52,22 @@ public class MessagesDB {
       iPAddress = context.Connection.RemoteIpAddress;
     }
     var clientInfo = ParsingService.ParseContext(context);
+    var osInfo = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}";
+    var deviceInfo = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}";
+    var browserInfo = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}";
     var existingConnection = await ctx.ClientConnections.FirstOrDefaultAsync(
       c => c.UserId == userId && (
         c.ConnectionId == connectionId || (
-          c.IpAddress == iPAddress.ToString() &&
-          c.Os == $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}" &&
-          c.Device == $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}" &&
-          c.Browser == $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}"
+          (
+            // IP Address can change. Therefore, we're also checking if the location is roughly the same.
+            c.IpAddress == iPAddress.ToString() || (
+              (int)(c.Latitude - (double)(geoData.Location.Latitude ?? (double)0.0)) <= 2 &&
+              (int)(c.Longitude - (double)(geoData.Location.Longitude ?? (double)0.0)) <= 2
+            )
+          ) &&
+          c.Os == osInfo &&
+          c.Device == deviceInfo &&
+          c.Browser == browserInfo
           )
       )
     );
@@ -67,31 +83,15 @@ public class MessagesDB {
     } else {
       iPAddress = context.Connection.RemoteIpAddress;
     }
-    var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context);
+    var geoData = await _maxMindClient.CityAsync(iPAddress);
+    var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context, geoData);
     if (existingConnection != null) {
-      var newConnection = new ClientConnection {
-        UserId = userId,
-        ConnectionId = connectionId,
-        IpAddress = iPAddress.ToString(),
-        CityName = existingConnection.CityName,
-        GeoNameId = existingConnection.GeoNameId,
-        CountryName = existingConnection.CountryName,
-        CountryIsoCode = existingConnection.CountryIsoCode,
-        Latitude = existingConnection.Latitude!,
-        Longitude = existingConnection.Longitude!,
-        Os = existingConnection.Os,
-        Device = existingConnection.Device,
-        Browser = existingConnection.Browser,
-        CreatedAt = DateTime.UtcNow,
-      };
-      ctx.Remove(existingConnection);
-      await ctx.ClientConnections.AddAsync(newConnection);
+      existingConnection.ConnectionId = connectionId;
       await ctx.SaveChangesAsync();
-      return newConnection;
+      return existingConnection;
     }
 
     var clientInfo = ParsingService.ParseContext(context);
-    var geoData = await _maxMindClient.CityAsync(iPAddress);
     var clientConnection = new ClientConnection {
       UserId = userId,
       ConnectionId = connectionId,
@@ -105,9 +105,9 @@ public class MessagesDB {
       Os = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}",
       Device = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}",
       Browser = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}",
-      CreatedAt = DateTime.UtcNow,
+      CreatedAt = DateTime.UtcNow
     };
-    await ctx.ClientConnections.AddAsync(clientConnection);
+  await ctx.ClientConnections.AddAsync(clientConnection);
     await ctx.SaveChangesAsync();
     return clientConnection;
   }

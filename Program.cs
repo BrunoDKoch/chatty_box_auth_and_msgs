@@ -127,9 +127,18 @@ app.UseExceptionHandler(exceptionHandler => {
         });
         return;
       }
+      string cause;
+      switch (ex.Error) {
+        case Microsoft.Data.SqlClient.SqlException sqlException:
+          cause = $"Database error {sqlException.Number}";
+          break;
+        default:
+          cause = "Internal server error";
+          break;
+      }
       await context.Response.WriteAsJsonAsync(new {
         status = context.Response.StatusCode,
-        cause = "Internal server error",
+        cause,
         message = ex.Error.Message
       });
     }
