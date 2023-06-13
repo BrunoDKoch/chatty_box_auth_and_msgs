@@ -43,14 +43,9 @@ public class MessagesDB {
     string userId,
     string connectionId,
     HttpContext context,
+    IPAddress iPAddress,
     CityResponse geoData
   ) {
-    IPAddress iPAddress;
-    if (context.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(context.Connection.RemoteIpAddress.ToString())) {
-      iPAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
-    } else {
-      iPAddress = context.Connection.RemoteIpAddress;
-    }
     var clientInfo = ParsingService.ParseContext(context);
     var osInfo = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}";
     var deviceInfo = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}";
@@ -84,7 +79,7 @@ public class MessagesDB {
       iPAddress = context.Connection.RemoteIpAddress;
     }
     var geoData = await _maxMindClient.CityAsync(iPAddress);
-    var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context, geoData);
+    var existingConnection = await CheckExistingConnection(ctx, userId, connectionId, context, iPAddress, geoData);
     if (existingConnection != null) {
       existingConnection.ConnectionId = connectionId;
       existingConnection.Active = true;
