@@ -13,9 +13,11 @@ public partial class UserReport {
   [StringLength(1000)]
   public string Id { get; set; } = null!;
 
-  [Column("userId")]
-  [StringLength(450)]
-  public string UserId { get; set; } = null!;
+  [Column("reportingUserId")]
+  public string ReportingUserId { get; set; } = null!;
+
+  [Column("reportedUserId")]
+  public string ReportedUserId { get; set; } = null!;
 
   [Column("reportReason")]
   [StringLength(1000)]

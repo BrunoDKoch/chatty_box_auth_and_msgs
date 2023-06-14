@@ -382,3 +382,10 @@ public class LockoutInfo {
   public string LockoutReason { get; set; } = null!;
   public DateTime LockoutEnd { get; set; }
 }
+
+public class ReportRequest {
+  public string ReportedUserId { get; set; } = null!;
+  public string? MessageId { get; set; } = null!;
+  public string? ChatId { get; set; } = null!;
+  public string ReportReason { get; set; } = null!;
+}

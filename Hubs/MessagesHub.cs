@@ -22,6 +22,7 @@ public class MessagesHub : Hub {
 
   private MessagesDB _messagesDB;
   private UserDB _userDB;
+  private AdminDB _adminDB;
 
   public MessagesHub(
       UserManager<User> userManager,
@@ -35,6 +36,7 @@ public class MessagesHub : Hub {
     _signInManager = signInManager;
     _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
     _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, maxMindClient);
+    _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
   private string EnsureUserIdNotNull(string? userId) {
@@ -595,5 +597,13 @@ public class MessagesHub : Hub {
       return new UserPartialResponse(admin, requestingUserId);
     });
     return result!;
+  }
+
+  // Report user
+  async public Task ReportUser(ReportRequest reportRequest) {
+    await HandleException(async () => {
+      var reportingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      await _adminDB.CreateReport(reportRequest, reportingUserId);
+    });
   }
 }
