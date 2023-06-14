@@ -46,6 +46,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
   public virtual DbSet<UserNotificationSetting> UserNotificationSettings { get; set; } = null!;
 
+  public DbSet<UserReport> UserReports { get; set; } = null!;
+
   public override DbSet<UserRole> UserRoles { get; set; } = null!;
 
   public override DbSet<UserToken> UserTokens { get; set; } = null!;
@@ -270,6 +272,26 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       entity.HasOne(d => d.User).WithOne(p => p.UserNotificationSetting)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("UserNotificationSettings_userId_fkey");
+    });
+
+    modelBuilder.Entity<UserReport>(entity => {
+      entity.HasKey(e => e.Id).HasName("UserReport_pkey");
+
+      entity.Property(e => e.SentAt).HasDefaultValueSql("(getdate())");
+
+      entity.HasOne(d => d.Chat).WithMany(p => p.UserReports).HasConstraintName("UserReport_chatId_fkey");
+
+      entity.HasOne(d => d.Message).WithMany(p => p.UserReports)
+        .OnDelete(DeleteBehavior.SetNull)
+        .HasConstraintName("UserReport_messageId_fkey");
+
+      entity.HasOne(d => d.ReportedUser).WithMany(p => p.UserReportReportedUsers)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("UserReport_reportedUserId_fkey");
+
+      entity.HasOne(d => d.ReportingUser).WithMany(p => p.UserReportReportingUsers)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("UserReport_reportingUserId_fkey");
     });
 
     modelBuilder.Entity<UserToken>(entity => {

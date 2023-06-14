@@ -29,6 +29,9 @@ public partial class User : IdentityUser {
   [Column("showStatus")]
   public bool ShowStatus { get; set; } = true;
 
+  [Column("lockoutReason")]
+  public string? LockoutReason { get; set; }
+
   [InverseProperty("From")]
   public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 
@@ -88,4 +91,10 @@ public partial class User : IdentityUser {
 
   [InverseProperty("InstigatingUser")]
   public virtual ICollection<SystemMessage> SystemMessageInstigatingUsers { get; set; } = new List<SystemMessage>();
+
+  [InverseProperty("ReportedUser")]
+  public virtual ICollection<UserReport> UserReportReportedUsers { get; set; } = new List<UserReport>();
+
+  [InverseProperty("ReportingUser")]
+  public virtual ICollection<UserReport> UserReportReportingUsers { get; set; } = new List<UserReport>();
 }

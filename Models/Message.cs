@@ -52,4 +52,7 @@ public partial class Message {
 
   [InverseProperty("Message")]
   public virtual ICollection<ReadMessage> ReadBy { get; set; } = new List<ReadMessage>();
+  
+  [InverseProperty("Message")]
+  public virtual ICollection<UserReport> UserReports { get; set; } = new List<UserReport>();
 }

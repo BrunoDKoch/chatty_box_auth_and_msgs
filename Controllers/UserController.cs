@@ -47,6 +47,25 @@ public class UserController : ControllerBase {
     _hubContext = hubContext;
   }
 
+  async private Task<User> GetUser(string email) {
+    var user = await _userManager.FindByEmailAsync(email);
+    ArgumentNullException.ThrowIfNull(user);
+    return user;
+  }
+
+  async private Task<User> GetUser(HttpContext httpContext) {
+    var user = await _userManager.GetUserAsync(httpContext.User);
+    ArgumentNullException.ThrowIfNull(user);
+    return user;
+  }
+
+  async private Task<User> GetUser(HttpContext httpContext, bool getConnections) {
+    var user = await _userManager.Users
+      .Include(u => u.ClientConnections)
+      .FirstOrDefaultAsync(u => u.Id == httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
+    ArgumentNullException.ThrowIfNull(user);
+    return user;
+  }
 
   async private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
     using var ctx = new ChattyBoxContext();
@@ -59,8 +78,6 @@ public class UserController : ControllerBase {
       );
     return suspiciousLocation;
   }
-
-
 
   async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
     IPAddress ipAddress;
@@ -138,35 +155,30 @@ public class UserController : ControllerBase {
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
     var user = await _userManager.FindByEmailAsync(data.Email);
-    if (user is null) return Unauthorized();
+    ArgumentNullException.ThrowIfNull(user);
 
-    try {
-      var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
+    var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
 
-      var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
-      string failureReason = "invalid credentials";
+    var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
+    string failureReason = "invalid credentials";
 
-      loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
-      if (loginAttempt is null) return BadRequest();
-      using var ctx = new ChattyBoxContext();
-      await ctx.UserLoginAttempts.AddAsync(loginAttempt);
-      await ctx.SaveChangesAsync();
-      // Tell the user if their account is locked out
-      if (await _userManager.IsLockedOutAsync(user)) {
-        if (user.LockoutEnd != DateTime.MaxValue)
-          failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
-        else failureReason = "account suspended indefinitely";
-      };
-      if (!loginAttempt.Success) {
-        await _userManager.AccessFailedAsync(user);
-        return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
-      };
-      await _userManager.ResetAccessFailedCountAsync(user);
-      return StatusCode(StatusCodes.Status302Found);
-    } catch (Exception e) {
-      Console.Error.WriteLine(e);
-      return Unauthorized();
-    }
+    loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
+    if (loginAttempt is null) return BadRequest();
+    using var ctx = new ChattyBoxContext();
+    await ctx.UserLoginAttempts.AddAsync(loginAttempt);
+    await ctx.SaveChangesAsync();
+    // Tell the user if their account is locked out
+    if (await _userManager.IsLockedOutAsync(user)) {
+      if (user.LockoutEnd != DateTime.MaxValue)
+        failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
+      else failureReason = "account suspended indefinitely";
+    };
+    if (!loginAttempt.Success) {
+      await _userManager.AccessFailedAsync(user);
+      return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
+    };
+    await _userManager.ResetAccessFailedCountAsync(user);
+    return StatusCode(StatusCodes.Status302Found);
   }
 
   [HttpGet("Login")]
@@ -181,10 +193,7 @@ public class UserController : ControllerBase {
 
   [HttpHead("Logout")]
   async public Task<IActionResult> LogOut([FromQuery] bool invalidateAllSessions = false) {
-    var userClaim = HttpContext.User;
-    if (userClaim == null) return BadRequest();
-    var user = await _userManager.GetUserAsync(userClaim);
-    if (user == null) return BadRequest();
+    var user = await GetUser(HttpContext);
     await _signInManager.SignOutAsync();
     if (invalidateAllSessions) await _userManager.UpdateSecurityStampAsync(user);
     return SignOut();
@@ -210,8 +219,7 @@ public class UserController : ControllerBase {
   [HttpPost("Validate/Email")]
   async public Task<IActionResult> ValidateEmail([FromBody] EmailValidationRequest request) {
     try {
-      var user = await _userManager.FindByEmailAsync(request.Email);
-      if (user == null) return BadRequest("User not found");
+      var user = await GetUser(request.Email);
       var claims = await _userManager.GetClaimsAsync(user);
       var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
       var valid = otpClaim != null && otpClaim.Value == request.Code;
@@ -232,8 +240,7 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Validate/Location")]
   async public Task<IActionResult> ValidadeLocation([FromBody] LocationValidationRequest request) {
-    var user = await _userManager.FindByEmailAsync(request.Email);
-    if (user == null) return BadRequest("User not found");
+    var user = await GetUser(request.Email);
     var claims = await _userManager.GetClaimsAsync(user);
     var newLocationVerificationClaim = claims.FirstOrDefault(u => u.Type == "NewLocation");
     var valid = newLocationVerificationClaim != null && newLocationVerificationClaim.Value == request.Code;
@@ -248,8 +255,7 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Recovery")]
   async public Task<IActionResult> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
-    var user = await _userManager.FindByEmailAsync(request.Email);
-    if (user == null) return BadRequest("User not found");
+    var user = await GetUser(request.Email);
     // TODO: handle this via email
     var token = _userManager.GeneratePasswordResetTokenAsync(user);
     return Ok(token);
@@ -258,11 +264,31 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPut("Recovery")]
   async public Task<IActionResult> RecoverPassword([FromBody] PasswordResetRequest request) {
-    var user = await _userManager.FindByEmailAsync(request.Email);
-    if (user == null) return BadRequest("User not found");
+    var user = await GetUser(request.Email);
     var result = await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
     if (!result.Succeeded) return Unauthorized();
     return Ok("Password reset");
+  }
+
+  // Handle MFA disabling
+  [HttpPut("MFA/Disable")]
+  async public Task<IActionResult> StartDisableMFA() {
+    var user = await GetUser(HttpContext);
+    if (!user.TwoFactorEnabled) throw new InvalidOperationException();
+    // This will force open a modal to get the user's credentials, which will then call the POST method
+    // TODO: inform user via email
+    return Accepted();
+  }
+
+  [HttpPost("MFA/Disable")]
+  async public Task<IActionResult> FinishDisableMFA([FromBody] MFADisableRequest request) {
+    var user = await GetUser(HttpContext);
+    var result = await _userManager.CheckPasswordAsync(user, request.Password);
+    if (!result) return Forbid();
+    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
+    await _userManager.SetTwoFactorEnabledAsync(user, false);
+    await _hubContext.Clients.User(user.Id).SendAsync("currentMFAOptions", new { isEnabled = false, providers }, default);
+    return Ok();
   }
 
   // Images

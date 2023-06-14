@@ -284,6 +284,10 @@ public class PasswordResetRequest : PasswordRecoveryTokenRequest {
   public string Password { get; set; } = null!;
 }
 
+public class MFADisableRequest {
+  public string Password { get; set; } = null!;
+}
+
 public class FriendRequestFiltered {
   public UserPartialResponse UserAdding { get; set; } = null!;
 }
@@ -371,4 +375,10 @@ public class UserConnectionCallInfo {
       .OrderByDescending(c => c.LastMessage is null ? c.CreatedAt : c.LastMessage.SentAt)
       .ToList();
   }
+}
+
+public class LockoutInfo {
+  public bool Lockout { get; set; }
+  public string LockoutReason { get; set; } = null!;
+  public DateTime LockoutEnd { get; set; }
 }

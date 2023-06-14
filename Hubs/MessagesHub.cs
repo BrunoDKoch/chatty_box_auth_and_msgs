@@ -228,6 +228,7 @@ public class MessagesHub : Hub {
     return await HandleException<bool>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _messagesDB.DeleteMessage(messageId, chatId, userId);
+      await Clients.GroupExcept(chatId, this.Context.ConnectionId).SendAsync("messageDeleted", messageId, default);
       return true;
     });
   }
@@ -316,7 +317,7 @@ public class MessagesHub : Hub {
           await AddToFriendsGroup(addingId, user.ClientConnections.Select(c => c.ConnectionId).ToList());
           await Clients.Group($"{addingId}_connections").SendAsync("newFriend", response, default);
         }
-        await Clients.Group($"{userId}_connections").SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
+        await Clients.User(userId).SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
       }
     });
   }
@@ -502,7 +503,7 @@ public class MessagesHub : Hub {
       var blockedConnections = await _messagesDB.GetClientConnections(userToBlockId);
       //await Clients.Caller.SendAsync("blockToggle", new { id = userToBlockId, blocked }, default);
       if (blockedConnections.Count > 0)
-        await Clients.Group($"{userToBlockId}_connections").SendAsync("blocked", new { id = userId, blocked }, default);
+        await Clients.User(userToBlockId).SendAsync("blocked", new { id = userId, blocked }, default);
       return blocked;
     });
     return result;
@@ -534,7 +535,7 @@ public class MessagesHub : Hub {
       var connections = await _messagesDB.GetClientConnections(userId);
       if (connections.Count > 0) {
         var connectionIds = connections.Select(c => c.ConnectionId).ToList();
-        await Clients.Group($"{userId}_connections").SendAsync("removedFromChat", chatId, default);
+        await Clients.User(userId).SendAsync("removedFromChat", chatId, default);
         foreach (var connectionId in connectionIds)
           await Groups.AddToGroupAsync(connectionId, chatId);
       }
@@ -555,7 +556,7 @@ public class MessagesHub : Hub {
       var connections = await _messagesDB.GetClientConnections(userId);
       if (connections.Count > 0) {
         var connectionIds = connections.Select(c => c.ConnectionId).ToList();
-        await Clients.Group($"{userId}_connections").SendAsync("removedFromChat", chatId, default);
+        await Clients.User(userId).SendAsync("removedFromChat", chatId, default);
         foreach (var connectionId in connectionIds)
           await Groups.RemoveFromGroupAsync(connectionId, chatId);
       }
@@ -590,7 +591,7 @@ public class MessagesHub : Hub {
       );
       await Clients.Group(chatId).SendAsync("systemMessage", systemMessage, default);
       if (admin.ClientConnections is not null)
-        await Clients.Group($"{userId}_connections").SendAsync("addedAsAdmin", chatId, default);
+        await Clients.User(userId).SendAsync("addedAsAdmin", chatId, default);
       return new UserPartialResponse(admin, requestingUserId);
     });
     return result!;

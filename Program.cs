@@ -81,6 +81,7 @@ builder.Services.ConfigureApplicationCookie(options => {
   options.LogoutPath = "/User/Logout";
   options.ExpireTimeSpan = TimeSpan.FromDays(14);
   options.SlidingExpiration = true;
+  options.Cookie.IsEssential = true;
   if (!builder.Environment.IsDevelopment())
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 });
@@ -119,28 +120,27 @@ app.UseExceptionHandler(exceptionHandler => {
     context.Response.ContentType = MediaTypeNames.Application.Json;
     var ex = context.Features.Get<IExceptionHandlerPathFeature>();
     if (ex is not null) {
-      if (context.Request.Path.Value == "/User/Login") {
-        await context.Response.WriteAsJsonAsync(new {
-          status = 403,
-          cause = "Unauthorized",
-          message = "Invalid credentials"
-        });
-        return;
+      Console.ForegroundColor = ConsoleColor.Red;
+      Console.WriteLine(context.Request.Path.Value);
+      Console.ResetColor();
+      if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("/api/v1/User")) {
+        if (ex.Error.GetType().ToString() == "ArgumentNullException") {
+          context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+          await context.Response.WriteAsync("Invalid credentials");
+          return;
+        }
       }
-      string cause;
+      string message;
       switch (ex.Error) {
         case Microsoft.Data.SqlClient.SqlException sqlException:
-          cause = $"Database error {sqlException.Number}";
+          message = $"Database error {sqlException.Number}";
           break;
         default:
-          cause = "Internal server error";
+          message = ex.Error.Message;
           break;
       }
-      await context.Response.WriteAsJsonAsync(new {
-        status = context.Response.StatusCode,
-        cause,
-        message = ex.Error.Message
-      });
+      context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+      await context.Response.WriteAsync(message);
     }
   });
 });
