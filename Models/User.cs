@@ -93,8 +93,8 @@ public partial class User : IdentityUser {
   public virtual ICollection<SystemMessage> SystemMessageInstigatingUsers { get; set; } = new List<SystemMessage>();
 
   [InverseProperty("ReportedUser")]
-  public virtual ICollection<UserReport> UserReportReportedUsers { get; set; } = new List<UserReport>();
+  public virtual ICollection<UserReport> ReportsAgainstUser { get; set; } = new List<UserReport>();
 
   [InverseProperty("ReportingUser")]
-  public virtual ICollection<UserReport> UserReportReportingUsers { get; set; } = new List<UserReport>();
+  public virtual ICollection<UserReport> UserReports { get; set; } = new List<UserReport>();
 }

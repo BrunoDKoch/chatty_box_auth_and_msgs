@@ -30,6 +30,7 @@ public class AdminDB {
     var report = new UserReport {
       Id = Guid.NewGuid().ToString(),
       ReportReason = reportRequest.ReportReason,
+      ReportedUserId = reportRequest.ReportedUserId,
       ChatId = reportRequest.ChatId,
       ReportingUserId = reportingUserId,
       MessageId = reportRequest.MessageId,
@@ -44,11 +45,27 @@ public class AdminDB {
   async public Task<List<UserReport>> ReadReports(int skip, int take) {
     using var ctx = new ChattyBoxContext();
     var reports = await ctx.UserReports
+      .Include(r => r.ReportedUser)
+      .Include(r => r.ReportingUser)
+      .Include(r => r.Chat)
+      .Include(r => r.Message)
       .OrderByDescending(r => r.SentAt)
       .Skip(skip)
       .Take(take)
       .ToListAsync();
     return reports;
+  }
+
+  async public Task<UserReport> GetReport(string id) {
+    using var ctx = new ChattyBoxContext();
+    var report = await ctx.UserReports
+      .Include(r => r.ReportedUser)
+      .Include(r => r.ReportingUser)
+      .Include(r => r.Chat)
+      .Include(r => r.Message)
+      .FirstOrDefaultAsync(r => r.Id == id);
+    ArgumentNullException.ThrowIfNull(report);
+    return report;
   }
 
   // Update

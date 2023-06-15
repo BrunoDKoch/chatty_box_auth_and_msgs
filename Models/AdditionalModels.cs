@@ -389,3 +389,45 @@ public class ReportRequest {
   public string? ChatId { get; set; } = null!;
   public string ReportReason { get; set; } = null!;
 }
+
+public class ReportPartial {
+  public string Id { get; set; } = null!;
+  public string ReportReason { get; set; } = null!;
+  public bool? ViolationFound;
+  public DateTime SentAt;
+}
+
+public class ReportUserResponse : UserPartialResponse {
+  public List<ReportPartial> PastViolations;
+  public ReportUserResponse(User user) : base(user) {
+    PastViolations =
+      user.ReportsAgainstUser
+      .Where(r => r.ViolationFound is not null && (bool)r.ViolationFound)
+      .Select(r => new ReportPartial {
+        Id = r.Id,
+        ReportReason = r.ReportReason,
+        ViolationFound = r.ViolationFound,
+        SentAt = r.SentAt,
+      })
+      .ToList();
+  }
+}
+
+public class ReportResponse : ReportPartial {
+  public ChatMessage? Message;
+  public CompleteChatResponse? Chat;
+  public UserPartialResponse ReportingUser;
+  public UserPartialResponse ReportedUser;
+  public string? AdminAction;
+  public ReportResponse(UserReport report, string adminId) {
+    Id = report.Id;
+    Message = report.Message is null ? null : new ChatMessage(report.Message, adminId);
+    Chat = report.Chat is null ? null : new CompleteChatResponse(report.Chat, adminId);
+    ReportedUser = new UserPartialResponse(report.ReportedUser);
+    ReportingUser = new UserPartialResponse(report.ReportingUser);
+    SentAt = report.SentAt;
+    ReportReason = report.ReportReason;
+    ViolationFound = report.ViolationFound;
+    AdminAction = report.AdminAction;
+  }
+}

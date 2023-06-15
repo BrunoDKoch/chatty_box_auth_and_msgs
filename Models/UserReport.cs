@@ -13,6 +13,9 @@ public partial class UserReport {
   [StringLength(1000)]
   public string Id { get; set; } = null!;
 
+  [Column("adminAction")]
+  public string? AdminAction { get; set; }
+
   [Column("reportingUserId")]
   public string ReportingUserId { get; set; } = null!;
 
@@ -46,10 +49,10 @@ public partial class UserReport {
   public virtual Message? Message { get; set; }
 
   [ForeignKey("ReportedUserId")]
-  [InverseProperty("UserReportReportedUsers")]
+  [InverseProperty("ReportsAgainstUser")]
   public virtual User ReportedUser { get; set; } = null!;
 
   [ForeignKey("ReportingUserId")]
-  [InverseProperty("UserReportReportingUsers")]
+  [InverseProperty("UserReports")]
   public virtual User ReportingUser { get; set; } = null!;
 }

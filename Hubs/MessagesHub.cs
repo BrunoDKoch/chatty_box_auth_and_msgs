@@ -115,9 +115,11 @@ public class MessagesHub : Hub {
         var httpContext = this.Context.GetHttpContext();
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
-        // Create a group to send messages to all of a client's connected devices
-        await Groups.AddToGroupAsync(this.Context.ConnectionId, $"{id}_connections", default);
         var user = await _userDB.GetPreliminaryConnectionCallInfo(id);
+        // Add to chats
+        foreach (var chat in user.Chats) {
+          await Groups.AddToGroupAsync(this.Context.ConnectionId, chat.Id, default);
+        }
 
         // Add to friend groups
         var friends =
@@ -144,7 +146,6 @@ public class MessagesHub : Hub {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _messagesDB.MarkConnectionAsInactive(userId, this.Context.ConnectionId);
       await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = String.Empty, online = false }, default);
-      await Groups.RemoveFromGroupAsync(this.Context.ConnectionId, $"{userId}_connections", default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
@@ -289,7 +290,7 @@ public class MessagesHub : Hub {
       await Clients.Caller.SendAsync("added", friendRequest, default);
       var addedConnections = await _messagesDB.GetClientConnections(addedId);
       if (addedConnections.Count == 0) return;
-      await Clients.Group($"{addedId}_connections").SendAsync("newFriendRequest", friendRequest, default);
+      await Clients.User(addedId).SendAsync("newFriendRequest", friendRequest, default);
     });
   }
 
@@ -317,7 +318,7 @@ public class MessagesHub : Hub {
         if (connection is not null) {
           await AddToFriendsGroup(userId, connection.Select(c => c.ConnectionId).ToList());
           await AddToFriendsGroup(addingId, user.ClientConnections.Select(c => c.ConnectionId).ToList());
-          await Clients.Group($"{addingId}_connections").SendAsync("newFriend", response, default);
+          await Clients.User(addingId).SendAsync("newFriend", response, default);
         }
         await Clients.User(userId).SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
       }
@@ -604,6 +605,23 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var reportingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       await _adminDB.CreateReport(reportRequest, reportingUserId);
+      await Clients.Caller.SendAsync("reportReceived", default);
+    });
+  }
+
+  // Update reports
+  [Authorize(Roles = "admin,owner")]
+  async public Task UpdateReport(string id, bool violationFound) {
+    await HandleException(async () => {
+      await _adminDB.SetViolationFound(id, violationFound);
+      var admins = await _userManager.GetUsersInRoleAsync("admin");
+      var adminsAndOwner = (
+        await _userManager.GetUsersInRoleAsync("owner")
+      )
+        .Concat(admins)
+        .Select(a => a.Id)
+        .ToList();
+      await Clients.Users(adminsAndOwner.AsReadOnly()).SendAsync("updateReport", new { id, violationFound }, default);
     });
   }
 }

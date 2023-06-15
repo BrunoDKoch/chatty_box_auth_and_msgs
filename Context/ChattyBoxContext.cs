@@ -285,11 +285,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
         .OnDelete(DeleteBehavior.SetNull)
         .HasConstraintName("UserReport_messageId_fkey");
 
-      entity.HasOne(d => d.ReportedUser).WithMany(p => p.UserReportReportedUsers)
+      entity.HasOne(d => d.ReportedUser).WithMany(p => p.ReportsAgainstUser)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("UserReport_reportedUserId_fkey");
 
-      entity.HasOne(d => d.ReportingUser).WithMany(p => p.UserReportReportingUsers)
+      entity.HasOne(d => d.ReportingUser).WithMany(p => p.UserReports)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("UserReport_reportingUserId_fkey");
     });

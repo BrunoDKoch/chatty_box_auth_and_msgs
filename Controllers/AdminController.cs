@@ -24,6 +24,7 @@ public class AdminController : ControllerBase {
   private readonly WebServiceClient _maxMindClient;
   private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
+  private AdminDB _adminDB;
 
   public AdminController(
       UserManager<User> userManager,
@@ -40,6 +41,7 @@ public class AdminController : ControllerBase {
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
+    _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
   // Admin check
@@ -54,14 +56,12 @@ public class AdminController : ControllerBase {
 
   // Reports
   [HttpGet("Reports")]
-  async public Task<IActionResult> GetReports(int skip, int take) {
-    using var ctx = new ChattyBoxContext();
-    var reports = await ctx.UserReports
-      .OrderByDescending(r => r.SentAt)
-      .Skip(skip)
-      .Take(take)
-      .ToListAsync();
-    return Ok(reports);
+  async public Task<IActionResult> GetReports([FromQuery] int skip, [FromQuery] int take) {
+    var adminId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    ArgumentNullException.ThrowIfNull(adminId);
+    var reports = await _adminDB.ReadReports(skip, take);
+    var response = reports.Select(r => new ReportResponse(r, adminId)).ToList();
+    return Ok(response);
   }
 
   [HttpPut("Reports/{id}")]
@@ -92,7 +92,7 @@ public class AdminController : ControllerBase {
     await _userManager.UpdateAsync(user);
 
     // Force user to log out
-    await _hubContext.Clients.Group($"{id}_connections").SendAsync("forceLogOut", default);
+    await _hubContext.Clients.User(user.Id).SendAsync("forceLogOut", default);
     return Ok();
   }
 
