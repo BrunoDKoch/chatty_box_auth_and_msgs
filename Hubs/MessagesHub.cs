@@ -8,6 +8,7 @@ using ChattyBox.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using UAParser;
+using Microsoft.Extensions.Localization;
 
 namespace ChattyBox.Hubs;
 
@@ -19,6 +20,7 @@ public class MessagesHub : Hub {
   private readonly RoleManager<Role> _roleManager;
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
+  private readonly IStringLocalizer<MessagesHub> _localizer;
 
   private MessagesDB _messagesDB;
   private UserDB _userDB;
@@ -29,7 +31,8 @@ public class MessagesHub : Hub {
       RoleManager<Role> roleManager,
       IConfiguration configuration,
       SignInManager<User> signInManager,
-      MaxMind.GeoIP2.WebServiceClient maxMindClient) {
+      MaxMind.GeoIP2.WebServiceClient maxMindClient,
+      IStringLocalizer<MessagesHub> localizer) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
@@ -37,6 +40,7 @@ public class MessagesHub : Hub {
     _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
     _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, maxMindClient);
     _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
+    _localizer = localizer;
   }
 
   private string EnsureUserIdNotNull(string? userId) {
@@ -54,12 +58,13 @@ public class MessagesHub : Hub {
     string message;
     switch (exception) {
       case Microsoft.Data.SqlClient.SqlException sqlException:
-        message = $"Database error {sqlException.Number}";
+        message = $"{_localizer.GetString("DatabaseError").Value} {sqlException.Number}";
         break;
       default:
-        message = exception.Message;
+        message = exception.HResult.ToString();
         break;
     }
+    message += $"\n{_localizer.GetString("OurEnd").Value}.\n{_localizer.GetString("SupportPersists").Value}.";
     await Clients.Caller.SendAsync(errorToSend, message, default);
   }
 

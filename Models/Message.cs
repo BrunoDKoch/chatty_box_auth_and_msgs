@@ -31,6 +31,9 @@ public partial class Message {
   [StringLength(1000)]
   public string Text { get; set; } = null!;
 
+  [Column("flaggedByAdmin")]
+  public bool FlaggedByAdmin { get; set; } = false;
+
   [Column("replyToId")]
   [StringLength(1000)]
   public string? ReplyToId { get; set; } = null!;
@@ -52,7 +55,7 @@ public partial class Message {
 
   [InverseProperty("Message")]
   public virtual ICollection<ReadMessage> ReadBy { get; set; } = new List<ReadMessage>();
-  
+
   [InverseProperty("Message")]
   public virtual ICollection<UserReport> UserReports { get; set; } = new List<UserReport>();
 }

@@ -21,6 +21,9 @@ using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.SignalR;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Localization;
+using ChattyBox.Localization;
+using Microsoft.Extensions.Localization;
 
 var reqOrigin = "_reqOrigin";
 
@@ -103,6 +106,14 @@ builder.Services.AddImageSharp()
 builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
 builder.Services.AddHttpClient<WebServiceClient>();
 
+builder.Services.AddLocalization();
+builder.Services.AddSingleton<LocalizationMiddleware>();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();
+
+builder.Services.AddRateLimiter(options => {
+  options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 var app = builder.Build();
 
@@ -113,6 +124,20 @@ if (app.Environment.IsDevelopment()) {
   IdentityModelEventSource.ShowPII = true;
 }
 
+app.UseRateLimiter();
+
+var supportedCultures = new List<RequestCulture> { new RequestCulture("en"), new RequestCulture("pt"), new RequestCulture("es") };
+var localizationProviders = new List<IRequestCultureProvider> { new CookieRequestCultureProvider { CookieName = "lang" } };
+var localizationOptions = new RequestLocalizationOptions {
+  DefaultRequestCulture = supportedCultures[0],
+  RequestCultureProviders = localizationProviders,
+  SupportedCultures = supportedCultures.Select(s => s.Culture).ToList(),
+  SupportedUICultures = supportedCultures.Select(s => s.UICulture).ToList()
+};
+
+app.UseRequestLocalization(localizationOptions);
+
+app.UseMiddleware<LocalizationMiddleware>();
 
 app.UseExceptionHandler(exceptionHandler => {
   exceptionHandler.Run(async context => {

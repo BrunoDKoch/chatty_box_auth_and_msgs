@@ -13,7 +13,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.IdentityModel.Tokens.Jwt;
-using UAParser;
+using Humanizer;
+using Microsoft.Extensions.Localization;
+using System.Resources;
 
 namespace ChattyBox.Controllers;
 
@@ -29,6 +31,7 @@ public class UserController : ControllerBase {
   private readonly WebServiceClient _maxMindClient;
   private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
+  private readonly IStringLocalizer<UserController> _localizer;
 
   public UserController(
       UserManager<User> userManager,
@@ -37,7 +40,8 @@ public class UserController : ControllerBase {
       SignInManager<User> signInManager,
       WebServiceClient maxMindClient,
       IWebHostEnvironment webHostEnvironment,
-      IHubContext<MessagesHub> hubContext) {
+      IHubContext<MessagesHub> hubContext,
+      IStringLocalizer<UserController> localizer) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
@@ -45,6 +49,7 @@ public class UserController : ControllerBase {
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
+    _localizer = localizer;
   }
 
   async private Task<User> GetUser(string email) {
@@ -154,13 +159,18 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
-    var user = await _userManager.FindByEmailAsync(data.Email);
-    ArgumentNullException.ThrowIfNull(user);
+
+    var user = await _userManager.Users.Include(u => u.ReportsAgainstUser).FirstOrDefaultAsync(u => u.Email == data.Email);
+    try {
+      ArgumentNullException.ThrowIfNull(user);
+    } catch {
+      return Unauthorized(_localizer.GetString("401Auth").Value);
+    }
 
     var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
 
     var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
-    string failureReason = "invalid credentials";
+    string failureReason = $"Invalid credentials.\n{_localizer.GetString("401Auth").Value}";
 
     loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
     if (loginAttempt is null) return BadRequest();
@@ -169,13 +179,21 @@ public class UserController : ControllerBase {
     await ctx.SaveChangesAsync();
     // Tell the user if their account is locked out
     if (await _userManager.IsLockedOutAsync(user)) {
-      if (user.LockoutEnd != DateTime.MaxValue)
-        failureReason = $"account suspended until \n {user.LockoutEnd!.Value.ToString()}";
-      else failureReason = "account suspended indefinitely";
+      string failureReasonStart;
+      if (user.LockoutEnd == DateTimeOffset.MaxValue) {
+        failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
+      } else {
+        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value}" +
+          $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
+      }
+      string failureReasonEnd = $"{_localizer.GetString("Reasons")}:" +
+        $"{string.Join(',', user.ReportsAgainstUser.Select(r => r.ReportReason))}";
+
+      failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
     };
     if (!loginAttempt.Success) {
       await _userManager.AccessFailedAsync(user);
-      return suspiciousLocation ? Forbid() : Unauthorized(failureReason);
+      return suspiciousLocation ? StatusCode(StatusCodes.Status403Forbidden, failureReason) : Unauthorized(failureReason);
     };
     await _userManager.ResetAccessFailedCountAsync(user);
     return StatusCode(StatusCodes.Status302Found);

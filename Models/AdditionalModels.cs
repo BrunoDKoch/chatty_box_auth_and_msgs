@@ -380,7 +380,8 @@ public class UserConnectionCallInfo {
 public class LockoutInfo {
   public bool Lockout { get; set; }
   public string LockoutReason { get; set; } = null!;
-  public DateTime LockoutEnd { get; set; }
+  public DateTime? LockoutEnd { get; set; }
+  public bool Permanent { get; set; }
 }
 
 public class ReportRequest {

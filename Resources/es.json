@@ -1,0 +1,19 @@
+{
+  "400": "El servidor no pudo entender su solicitud. Por favor, asegúrese de haber proporcionado datos o parámetros válidos.",
+  "403": "No tiene permiso para acceder al recurso solicitado.",
+  "404": "No se pudo encontrar el recurso solicitado. Por favor, verifique la URL o compruebe si el recurso aún existe.",
+  "405": "El método HTTP solicitado no es compatible con este recurso. Por favor, utilice un método diferente o consulte la documentación de la API.",
+  "408": "El servidor no recibió una respuesta oportuna del servidor upstream. Por favor, verifique su conexión de red e intente nuevamente.",
+  "413": "La carga de la solicitud excede el límite de tamaño. Por favor, reduzca el tamaño de la carga y vuelva a intentarlo.",
+  "429": "Ha superado el límite de velocidad para esta operación. Por favor, espere e inténtelo nuevamente más tarde.",
+  "500": "Se produjo un error inesperado en nuestro servidor. Nos disculpamos por las molestias. Por favor, inténtelo nuevamente más tarde.",
+  "502": "El servidor recibió una respuesta no válida de un servidor upstream. Por favor, inténtelo nuevamente más tarde o informe el problema a nuestro equipo de soporte.",
+  "OurEnd": "Este problema probablemente sea de nuestra parte.",
+  "401 General": "El acceso al recurso solicitado no está autorizado. Por favor, asegúrese de haber iniciado sesión o proporcione credenciales válidas.",
+  "401 Auth": "Ha ingresado un correo electrónico o contraseña no válidos. Si tiene una cuenta, verifique las credenciales proporcionadas.",
+  "SupportPersists": "Si este problema persiste, contacte con el soporte.",
+  "SupportMistake": "Si cree que esto es un error, contacte con el soporte.",
+  "PermanentSuspension": "Cuenta suspendida permanentemente",
+  "TemporarySuspension": "Cuenta suspendida por",
+  "Reasons": "Razones"
+}

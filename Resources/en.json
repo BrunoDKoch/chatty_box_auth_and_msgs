@@ -1,0 +1,20 @@
+{
+  "400": "The server could not understand your request. Please ensure you have provided valid data or parameters",
+  "403": "You don't have permission to access the requested resource.",
+  "404": "The requested resource could not be found. Please verify the URL or check if the resource still exists.",
+  "405": "The requested HTTP method is not supported for this resource. Please use a different method or check the API documentation;",
+  "408": "The server did not receive a timely response from the upstream server. Please check your network connection and try again.",
+  "413": "The request payload exceeds the size limit. Please reduce the payload size and try again.",
+  "429": "You have exceeded the rate limit for this operation. Please wait and try again later.",
+  "500": "An unexpected error occurred on our server. We apologize for the inconvenience. Please try again later.",
+  "502": "The server received an invalid response from an upstream server. Please try again later or report the issue to our support team.",
+  "OurEnd": "This is likely an issue on our end.",
+  "401General": "Access to the requested resource is unauthorized. Please make sure you are logged in or provide valid credentials.",
+  "401Auth": "You have entered an invalid email or password. If you have an account, please verify the credentials you have provided.",
+  "DatabaseError": "Database error code",
+  "SupportPersists": "If this issue persists, contact support.",
+  "SupportMistake": "If you believe this is a mistake, contact support.",
+  "PermanentSuspension": "Account permanently suspended",
+  "TemporarySuspension": "Account suspended for",
+  "Reasons": "Reasons"
+}

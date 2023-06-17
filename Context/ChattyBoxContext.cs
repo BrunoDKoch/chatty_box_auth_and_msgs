@@ -132,6 +132,8 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
 
       entity.Property(e => e.SentAt).HasDefaultValueSql("(getdate())");
 
+      entity.Property(e => e.FlaggedByAdmin).HasDefaultValueSql("((0))");
+
       entity.HasOne(d => d.Chat).WithMany(p => p.Messages)
         .OnDelete(DeleteBehavior.ClientSetNull)
         .HasConstraintName("Message_chatId_fkey");

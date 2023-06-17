@@ -11,6 +11,7 @@ using MaxMind.GeoIP2;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using Humanizer;
 
 [ApiController]
 [Authorize(Roles = "admin, owner")]
@@ -47,19 +48,21 @@ public class AdminController : ControllerBase {
   // Admin check
   [AllowAnonymous]
   [HttpGet("IsAdmin")]
-  async public Task<IActionResult> AdminCheck() {
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    ArgumentNullException.ThrowIfNull(user);
-    var roles = await _userManager.GetRolesAsync(user);
-    return Ok(roles.Any(r => r == "admin" || r == "owner"));
+  public IActionResult AdminCheck() {
+    return Ok(HttpContext.User.Claims.Any(c => c.Type == ClaimTypes.Role && (c.Value == "admin" || c.Value == "owner")));
   }
 
   // Reports
   [HttpGet("Reports")]
-  async public Task<IActionResult> GetReports([FromQuery] int skip, [FromQuery] int take) {
+  async public Task<IActionResult> GetReports(
+    [FromQuery] int skip,
+    [FromQuery] int take,
+    [FromQuery] bool excludePending = false,
+    [FromQuery] bool violationsFound = false
+  ) {
     var adminId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
     ArgumentNullException.ThrowIfNull(adminId);
-    var reports = await _adminDB.ReadReports(skip, take);
+    var reports = await _adminDB.ReadReports(skip, take, excludePending, violationsFound);
     var response = reports.Select(r => new ReportResponse(r, adminId)).ToList();
     return Ok(response);
   }
@@ -76,23 +79,36 @@ public class AdminController : ControllerBase {
   // Lockout
   [HttpPut("User/{id}")]
   async public Task<IActionResult> LockUserOut(string id, [FromBody] LockoutInfo lockoutInfo) {
-    var user = await _userManager
-      .Users
-      .Include(u => u.ClientConnections)
-      .FirstOrDefaultAsync(u => u.Id == id);
-    ArgumentNullException.ThrowIfNull(user);
+    using var ctx = new ChattyBoxContext();
+    var report =
+      await ctx.UserReports
+        .Include(r => r.Message)
+        .Include(r => r.ReportedUser)
+          .ThenInclude(u => u.ClientConnections)
+        .FirstOrDefaultAsync(r => r.Id == id);
+    ArgumentNullException.ThrowIfNull(report);
+
+    if (report.Message is not null)
+      report.Message.FlaggedByAdmin = true;
 
     // Set lockout
     if (!lockoutInfo.Lockout)
-      user.LockoutEnd = DateTimeOffset.MinValue;
+      report.ReportedUser.LockoutEnd = DateTimeOffset.MinValue;
     else {
-      user.LockoutEnd = lockoutInfo.LockoutEnd;
-      user.LockoutReason = lockoutInfo.LockoutReason;
+      report.ReportedUser.LockoutEnd = lockoutInfo.Permanent ? DateTimeOffset.MaxValue : lockoutInfo.LockoutEnd;
+      report.ReportedUser.LockoutReason = lockoutInfo.LockoutReason;
     }
-    await _userManager.UpdateAsync(user);
 
-    // Force user to log out
-    await _hubContext.Clients.User(user.Id).SendAsync("forceLogOut", default);
+    if (lockoutInfo.Lockout) {
+      report.AdminAction = lockoutInfo.Permanent ? 
+        "permanent suspension" : 
+        $"suspension for {(DateTime.UtcNow - lockoutInfo.LockoutEnd)!.Value.Humanize(3)}";
+      // Force user to log out
+      await _hubContext.Clients.User(report.ReportedUser.Id).SendAsync("forceLogOut", default);
+    }
+
+    await ctx.SaveChangesAsync();
+
     return Ok();
   }
 
