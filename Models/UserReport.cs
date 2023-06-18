@@ -13,9 +13,6 @@ public partial class UserReport {
   [StringLength(1000)]
   public string Id { get; set; } = null!;
 
-  [Column("adminAction")]
-  public string? AdminAction { get; set; }
-
   [Column("reportingUserId")]
   public string ReportingUserId { get; set; } = null!;
 
@@ -55,4 +52,7 @@ public partial class UserReport {
   [ForeignKey("ReportingUserId")]
   [InverseProperty("UserReports")]
   public virtual User ReportingUser { get; set; } = null!;
+
+  [InverseProperty("Report")]
+  public virtual ICollection<AdminAction> AdminActions { get; set; } = new List<AdminAction>();
 }

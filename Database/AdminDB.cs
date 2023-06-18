@@ -49,6 +49,8 @@ public class AdminDB {
       .Include(r => r.ReportingUser)
       .Include(r => r.Chat)
       .Include(r => r.Message)
+      .Include(r => r.AdminActions)
+        .ThenInclude(a => a.Admin)
       .OrderByDescending(r => r.SentAt)
       .Skip(skip)
       .Take(take)
@@ -63,10 +65,12 @@ public class AdminDB {
       .Include(r => r.ReportingUser)
       .Include(r => r.Chat)
       .Include(r => r.Message)
+      .Include(r => r.AdminActions)
+        .ThenInclude(a => a.Admin)
       .Where(
         r => excludePending ? 
-        r.ViolationFound != null && (!(bool)r.ViolationFound) || !String.IsNullOrEmpty(r.AdminAction) :
-        r.ViolationFound == null || ((bool)r.ViolationFound && String.IsNullOrEmpty(r.AdminAction))
+        r.ViolationFound != null && (!(bool)r.ViolationFound) || r.AdminActions.Any() :
+        r.ViolationFound == null || ((bool)r.ViolationFound && !r.AdminActions.Any())
       )
       .Where(r => violationsFound ? r.ViolationFound != null && r.ViolationFound == violationsFound : true)
       .OrderByDescending(r => r.SentAt)

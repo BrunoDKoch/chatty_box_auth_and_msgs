@@ -395,20 +395,32 @@ public class MessagesHub : Hub {
   }
 
   // User settings
-  async public Task GetNotificationSettings() {
-    await HandleException(async () => {
+  async public Task<UserNotificationSetting> GetNotificationSettings() {
+    var result = await HandleException<UserNotificationSetting>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var settings = await _userDB.GetNotificationSettings(userId);
-      await Clients.Caller.SendAsync("notificationSettings", settings, default);
+      UserNotificationSetting settings = await _userDB.GetNotificationSettings(userId);
+      return settings ?? new UserNotificationSetting {
+        UserId = userId,
+        ShowOSNotification = true,
+        PlaySound = true,
+        ShowAlert = true,
+      };
     });
+    return result!;
   }
 
-  async public Task UpdateNotificationSettings(bool playSound, bool showOSNotification, bool showAlert) {
-    await HandleException(async () => {
+  async public Task<UserNotificationSetting> UpdateNotificationSettings(bool playSound, bool showOSNotification, bool showAlert) {
+    var result = await HandleException<UserNotificationSetting>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var settings = await _userDB.UpdateUserNotificationSettings(userId, playSound, showOSNotification, showAlert);
-      await Clients.Caller.SendAsync("notificationSettings", settings, default);
+      return settings ?? new UserNotificationSetting {
+        UserId = userId,
+        ShowOSNotification = true,
+        PlaySound = true,
+        ShowAlert = true,
+      };
     });
+    return result!;
   }
 
   // Status

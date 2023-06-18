@@ -54,10 +54,11 @@ public class ChatMessage {
   public UserPartialResponse User { get; set; } = null!;
   public bool IsFromCaller { get; set; }
   public ICollection<ReadMessagePartialResponse> ReadBy { get; set; } = new List<ReadMessagePartialResponse>();
-  public ChatMessage(Message message, string mainUserId) {
+  public ChatMessage(Message message, string mainUserId, bool adminRequest = false) {
     Id = message.Id;
     ChatId = message.ChatId;
-    Text = message.Text;
+    // Omit text if flagged
+    Text = message.FlaggedByAdmin && !adminRequest ? "messageFlagged" : message.Text;
     ReplyToId = message.ReplyToId;
     SentAt = message.SentAt;
     EditedAt = message.EditedAt;
@@ -414,21 +415,41 @@ public class ReportUserResponse : UserPartialResponse {
   }
 }
 
+public class AdminActionPartial {
+  public UserPartialResponse Admin;
+  public string Action;
+  public DateTime EnactedOn;
+  public bool Revoked;
+  public AdminActionPartial(AdminAction action) {
+    Admin = new UserPartialResponse(action.Admin);
+    Action = action.Action;
+    EnactedOn = action.EnactedOn;
+    Revoked = action.Revoked;
+  }
+}
+
 public class ReportResponse : ReportPartial {
   public ChatMessage? Message;
   public CompleteChatResponse? Chat;
   public UserPartialResponse ReportingUser;
-  public UserPartialResponse ReportedUser;
-  public string? AdminAction;
+  public ReportUserResponse ReportedUser;
+  public List<AdminActionPartial> AdminActions;
   public ReportResponse(UserReport report, string adminId) {
     Id = report.Id;
-    Message = report.Message is null ? null : new ChatMessage(report.Message, adminId);
+    Message = report.Message is null ? null : new ChatMessage(report.Message, adminId, adminRequest: true);
     Chat = report.Chat is null ? null : new CompleteChatResponse(report.Chat, adminId);
-    ReportedUser = new UserPartialResponse(report.ReportedUser);
+    ReportedUser = new ReportUserResponse(report.ReportedUser);
     ReportingUser = new UserPartialResponse(report.ReportingUser);
     SentAt = report.SentAt;
     ReportReason = report.ReportReason;
     ViolationFound = report.ViolationFound;
-    AdminAction = report.AdminAction;
+    AdminActions = report.AdminActions.Select(a => new AdminActionPartial(a)).ToList();
   }
+}
+
+public class AdminActionRequest {
+  public string ReportId { get; set; } = null!;
+  public bool PermanentLockout = false;
+  public DateTime? LockoutEnd;
+  public bool ViolationFound = false;
 }

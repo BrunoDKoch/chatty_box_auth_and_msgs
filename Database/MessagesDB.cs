@@ -197,7 +197,7 @@ public class MessagesDB {
       .Include(m => m.From)
       .Include(m => m.ReadBy)
         .ThenInclude(r => r.ReadBy)
-      .Select(m => new ChatMessage(m, userId))
+      .Select(m => new ChatMessage(m, userId, false))
       .ToListAsync();
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
     var chat = await ctx.Chats

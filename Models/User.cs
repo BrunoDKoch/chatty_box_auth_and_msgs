@@ -97,4 +97,7 @@ public partial class User : IdentityUser {
 
   [InverseProperty("ReportingUser")]
   public virtual ICollection<UserReport> UserReports { get; set; } = new List<UserReport>();
+
+  [InverseProperty("Admin")]
+  public virtual ICollection<AdminAction> AdminActions { get; set; } = new List<AdminAction>();
 }

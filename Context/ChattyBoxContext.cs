@@ -15,6 +15,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
       : base(options) {
   }
 
+  public virtual DbSet<AdminAction> AdminActions { get; set; } = null!;
   public virtual DbSet<Blocked> Blocks { get; set; } = null!;
 
   public virtual DbSet<ClientConnection> ClientConnections { get; set; } = null!;
@@ -64,6 +65,20 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   }
 
   protected override void OnModelCreating(ModelBuilder modelBuilder) {
+    modelBuilder.Entity<AdminAction>(entity => {
+      entity.HasKey(e => new { e.ReportId, e.AdminId }).HasName("AdminAction_pkey");
+
+      entity.Property(e => e.EnactedOn).HasDefaultValueSql("(getdate())");
+      entity.Property(e => e.Revoked).HasDefaultValueSql("((0))");
+
+      entity.HasOne(d => d.Admin).WithMany(p => p.AdminActions)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("AdminAction_adminId_fkey");
+
+      entity.HasOne(d => d.Report).WithMany(p => p.AdminActions)
+        .OnDelete(DeleteBehavior.ClientSetNull)
+        .HasConstraintName("AdminAction_reportId_fkey");
+    });
 
     modelBuilder.Entity<ClientConnection>(entity => {
       entity.HasKey(e => e.Id).HasName("ClientConnection_pkey");

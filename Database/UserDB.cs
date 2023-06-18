@@ -124,10 +124,10 @@ public class UserDB {
     return await _userManager.FindByIdAsync(userId);
   }
 
-  async public Task<UserNotificationSetting?> GetNotificationSettings(string userId) {
+  async public Task<UserNotificationSetting> GetNotificationSettings(string userId) {
     using var ctx = new ChattyBoxContext();
     var user = await ctx.Users.Include(u => u.UserNotificationSetting).FirstAsync(u => u.Id == userId);
-    if (user == null) return null;
+    ArgumentNullException.ThrowIfNull(user);
     if (user.UserNotificationSetting == null) {
       user.UserNotificationSetting = new UserNotificationSetting {
         PlaySound = true,

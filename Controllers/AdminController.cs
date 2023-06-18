@@ -45,6 +45,17 @@ public class AdminController : ControllerBase {
     _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
+  private string GetAdminActionString(AdminActionRequest actionRequest) {
+    if (!actionRequest.ViolationFound)
+      return "none";
+    else if (actionRequest.PermanentLockout)
+      return "permanent suspension";
+    else if (actionRequest.LockoutEnd is not null)
+      return $"suspension for {(DateTime.UtcNow - actionRequest.LockoutEnd)!.Value.Humanize(3)}";
+    else
+      return "message retained";
+  }
+
   // Admin check
   [AllowAnonymous]
   [HttpGet("IsAdmin")]
@@ -76,39 +87,29 @@ public class AdminController : ControllerBase {
     return Ok(report);
   }
 
-  // Lockout
-  [HttpPut("User/{id}")]
-  async public Task<IActionResult> LockUserOut(string id, [FromBody] LockoutInfo lockoutInfo) {
+  // Admin action
+  [HttpPost("Action")]
+  async public Task<IActionResult> CreateAdminAction([FromBody] AdminActionRequest actionRequest) {
+    var adminId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    ArgumentNullException.ThrowIfNull(adminId);
+    var action = new AdminAction {
+      AdminId = adminId,
+      ReportId = actionRequest.ReportId,
+      Action = GetAdminActionString(actionRequest)
+    };
     using var ctx = new ChattyBoxContext();
     var report =
       await ctx.UserReports
-        .Include(r => r.Message)
         .Include(r => r.ReportedUser)
-          .ThenInclude(u => u.ClientConnections)
-        .FirstOrDefaultAsync(r => r.Id == id);
+        .FirstOrDefaultAsync(r => r.Id == action.ReportId);
     ArgumentNullException.ThrowIfNull(report);
-
-    if (report.Message is not null)
-      report.Message.FlaggedByAdmin = true;
-
-    // Set lockout
-    if (!lockoutInfo.Lockout)
-      report.ReportedUser.LockoutEnd = DateTimeOffset.MinValue;
-    else {
-      report.ReportedUser.LockoutEnd = lockoutInfo.Permanent ? DateTimeOffset.MaxValue : lockoutInfo.LockoutEnd;
-      report.ReportedUser.LockoutReason = lockoutInfo.LockoutReason;
+    report.ViolationFound = actionRequest.ViolationFound;
+    if (actionRequest.LockoutEnd is not null || actionRequest.PermanentLockout) {
+      report.ReportedUser.LockoutEnd = actionRequest.LockoutEnd ?? DateTimeOffset.MaxValue;
+      report.ReportedUser.LockoutReason = report.ReportReason;
     }
-
-    if (lockoutInfo.Lockout) {
-      report.AdminAction = lockoutInfo.Permanent ? 
-        "permanent suspension" : 
-        $"suspension for {(DateTime.UtcNow - lockoutInfo.LockoutEnd)!.Value.Humanize(3)}";
-      // Force user to log out
-      await _hubContext.Clients.User(report.ReportedUser.Id).SendAsync("forceLogOut", default);
-    }
-
+    await ctx.AdminActions.AddAsync(action);
     await ctx.SaveChangesAsync();
-
     return Ok();
   }
 
