@@ -127,5 +127,17 @@ public class AdminController : ControllerBase {
     return Ok();
   }
 
-
+  // Get suspended users
+  [HttpGet("Suspensions")]
+  async public Task<IActionResult> GetSuspendedUsers([FromQuery] int skip, [FromQuery] int take) {
+    var suspendedUsers = await _userManager.Users
+      .Where(u => u.LockoutEnd > DateTime.UtcNow)
+      .Include(u => u.ReportsAgainstUser)
+      .OrderByDescending(u => u.LockoutEnd)
+      .Skip(skip)
+      .Take(take)
+      .Select(u => new ReportUserResponse(u))
+      .ToListAsync();
+    return Ok(suspendedUsers);
+  }
 }

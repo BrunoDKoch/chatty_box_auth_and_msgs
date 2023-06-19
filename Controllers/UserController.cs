@@ -183,11 +183,14 @@ public class UserController : ControllerBase {
       if (user.LockoutEnd == DateTimeOffset.MaxValue) {
         failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
       } else {
-        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value}" +
+        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value} " +
           $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
       }
-      string failureReasonEnd = $"{_localizer.GetString("Reasons")}:" +
-        $"{string.Join(',', user.ReportsAgainstUser.Select(r => r.ReportReason))}";
+      string failureReasonEnd = $"{_localizer.GetString("Reasons")}: " +
+        string.Join(',', (
+          user.ReportsAgainstUser.Select(r => _localizer.GetString(r.ReportReason.Replace("report.", "").Pascalize()))
+          )
+        );
 
       failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
     };

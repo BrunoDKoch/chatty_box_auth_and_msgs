@@ -15,5 +15,18 @@
   "SupportMistake": "Se você acredita que isso é um erro, entre em contato com o suporte.",
   "PermanentSuspension": "Conta permanentemente suspensa",
   "TemporarySuspension": "Conta suspensa por",
-  "Reasons": "Motivos"
+  "Reasons": "Motivos",
+  "Report": "reportar {item}",
+  "Reported": "{item} reportado",
+  "ReportSent": "sua denúncia foi enviada",
+  "HarassmentBullying": "Assédio ou bullying",
+  "SpamMessages": "Spam ou mensagens indesejadas",
+  "InappropriateContent": "Conteúdo inadequado",
+  "ViolentGraphicContent": "Conteúdo violento ou gráfico",
+  "ImpersonationFakeProfile": "Falsificação de identidade ou perfil falso",
+  "HateSpeechOffensiveLanguage": "Discurso de ódio ou linguagem ofensiva",
+  "SuspiciousFraudulentActivity": "Atividade suspeita ou fraudulenta",
+  "IntellectualPropertyInfringement": "Violação de propriedade intelectual",
+  "PrivacyViolation": "Violação de privacidade",
+  "Other": "Outro (por favor, especifique)"
 }

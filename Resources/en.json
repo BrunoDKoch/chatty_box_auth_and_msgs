@@ -16,5 +16,18 @@
   "SupportMistake": "If you believe this is a mistake, contact support.",
   "PermanentSuspension": "Account permanently suspended",
   "TemporarySuspension": "Account suspended for",
-  "Reasons": "Reasons"
+  "Reasons": "Reasons",
+  "Report": "report {item}",
+  "Reported": "{item} reported",
+  "ReportSent": "your report was sent",
+  "HarassmentBullying": "Harassment or bullying",
+  "SpamMessages": "Spam or unwanted messages",
+  "InappropriateContent": "Inappropriate content",
+  "ViolentGraphicContent": "Violent or graphic content",
+  "ImpersonationFakeProfile": "Impersonation or fake profile",
+  "HateSpeechOffensiveLanguage": "Hate speech or offensive language",
+  "SuspiciousFraudulentActivity": "Suspicious or fraudulent activity",
+  "IntellectualPropertyInfringement": "Intellectual property infringement",
+  "PrivacyViolation": "Privacy violation",
+  "Other": "Other (please specify)"
 }

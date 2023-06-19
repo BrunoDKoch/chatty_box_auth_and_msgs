@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Humanizer;
 
 namespace ChattyBox.Models;
 
@@ -401,7 +402,9 @@ public class ReportPartial {
 
 public class ReportUserResponse : UserPartialResponse {
   public List<ReportPartial> PastViolations;
+  public string LockoutEnd;
   public ReportUserResponse(User user) : base(user) {
+    LockoutEnd = user.LockoutEnd.Humanize();
     PastViolations =
       user.ReportsAgainstUser
       .Where(r => r.ViolationFound is not null && (bool)r.ViolationFound)
