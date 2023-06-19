@@ -8,7 +8,7 @@ using ChattyBox.Hubs;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using MaxMind.GeoIP2;
-using System.Net;
+using Microsoft.Extensions.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Humanizer;
@@ -25,6 +25,7 @@ public class AdminController : ControllerBase {
   private readonly WebServiceClient _maxMindClient;
   private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
+  private readonly IStringLocalizer<AdminController> _localizer;
   private AdminDB _adminDB;
 
   public AdminController(
@@ -34,7 +35,8 @@ public class AdminController : ControllerBase {
       SignInManager<User> signInManager,
       WebServiceClient maxMindClient,
       IWebHostEnvironment webHostEnvironment,
-      IHubContext<MessagesHub> hubContext) {
+      IHubContext<MessagesHub> hubContext,
+      IStringLocalizer<AdminController> localizer) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
@@ -42,6 +44,7 @@ public class AdminController : ControllerBase {
     _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
+    _localizer = localizer;
     _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
@@ -74,7 +77,7 @@ public class AdminController : ControllerBase {
     var adminId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
     ArgumentNullException.ThrowIfNull(adminId);
     var reports = await _adminDB.ReadReports(skip, take, excludePending, violationsFound);
-    var response = reports.Select(r => new ReportResponse(r, adminId)).ToList();
+    var response = reports.Select(r => new ReportResponse(r, adminId, _localizer)).ToList();
     return Ok(response);
   }
 
@@ -110,6 +113,23 @@ public class AdminController : ControllerBase {
     }
     await ctx.AdminActions.AddAsync(action);
     await ctx.SaveChangesAsync();
+    await _hubContext.Clients.Group("admins").SendAsync("action", new { reportId = report.Id, actionPartial = new AdminActionPartial(action) }, default);
+    return Ok();
+  }
+
+  [HttpPost("Lockout/{userId}")]
+  async public Task<IActionResult> LockUserOut(string userId, [FromBody] LockoutInfo lockoutInfo) {
+    var user = await _userManager.FindByIdAsync(userId);
+    ArgumentNullException.ThrowIfNull(user);
+    if (!lockoutInfo.Lockout)
+      user.LockoutEnd = DateTimeOffset.MinValue;
+    else if (lockoutInfo.Permanent)
+      user.LockoutEnd = DateTimeOffset.MaxValue;
+    else
+      user.LockoutEnd = lockoutInfo.LockoutEnd;
+    
+    user.LockoutReason = lockoutInfo.LockoutReason;
+    await _userManager.UpdateAsync(user);
     return Ok();
   }
 
@@ -136,7 +156,7 @@ public class AdminController : ControllerBase {
       .OrderByDescending(u => u.LockoutEnd)
       .Skip(skip)
       .Take(take)
-      .Select(u => new ReportUserResponse(u))
+      .Select(u => new ReportUserResponse(u, _localizer))
       .ToListAsync();
     return Ok(suspendedUsers);
   }

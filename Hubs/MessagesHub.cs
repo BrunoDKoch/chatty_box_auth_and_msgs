@@ -121,6 +121,11 @@ public class MessagesHub : Hub {
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
         var user = await _userDB.GetPreliminaryConnectionCallInfo(id);
+        
+        // Add to admin group
+        if (user.Roles.Any() && user.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER"))
+          await Groups.AddToGroupAsync(this.Context.ConnectionId, "admins", default);
+
         // Add to chats
         foreach (var chat in user.Chats) {
           await Groups.AddToGroupAsync(this.Context.ConnectionId, chat.Id, default);

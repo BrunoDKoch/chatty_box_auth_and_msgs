@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Humanizer;
+using Microsoft.Extensions.Localization;
+using ChattyBox.Controllers;
 
 namespace ChattyBox.Models;
 
@@ -403,8 +405,10 @@ public class ReportPartial {
 public class ReportUserResponse : UserPartialResponse {
   public List<ReportPartial> PastViolations;
   public string LockoutEnd;
-  public ReportUserResponse(User user) : base(user) {
-    LockoutEnd = user.LockoutEnd.Humanize();
+  public ReportUserResponse(User user, IStringLocalizer<AdminController> localizer) : base(user) {
+    LockoutEnd = user.LockoutEnd == DateTimeOffset.MaxValue ? 
+      localizer.GetString("PermanentSuspension")! :
+      $"{localizer.GetString("TemporarySuspension")} {TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize()}";
     PastViolations =
       user.ReportsAgainstUser
       .Where(r => r.ViolationFound is not null && (bool)r.ViolationFound)
@@ -437,11 +441,11 @@ public class ReportResponse : ReportPartial {
   public UserPartialResponse ReportingUser;
   public ReportUserResponse ReportedUser;
   public List<AdminActionPartial> AdminActions;
-  public ReportResponse(UserReport report, string adminId) {
+  public ReportResponse(UserReport report, string adminId, IStringLocalizer<AdminController> localizer) {
     Id = report.Id;
     Message = report.Message is null ? null : new ChatMessage(report.Message, adminId, adminRequest: true);
     Chat = report.Chat is null ? null : new CompleteChatResponse(report.Chat, adminId);
-    ReportedUser = new ReportUserResponse(report.ReportedUser);
+    ReportedUser = new ReportUserResponse(report.ReportedUser, localizer);
     ReportingUser = new UserPartialResponse(report.ReportingUser);
     SentAt = report.SentAt;
     ReportReason = report.ReportReason;
