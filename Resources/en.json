@@ -29,5 +29,6 @@
   "SuspiciousFraudulentActivity": "Suspicious or fraudulent activity",
   "IntellectualPropertyInfringement": "Intellectual property infringement",
   "PrivacyViolation": "Privacy violation",
-  "Other": "Other (please specify)"
+  "Other": "Other (please specify)",
+  "user": "user"
 }

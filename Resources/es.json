@@ -28,5 +28,6 @@
   "SuspiciousFraudulentActivity": "Actividad sospechosa o fraudulenta",
   "IntellectualPropertyInfringement": "Infracción de propiedad intelectual",
   "PrivacyViolation": "Violación de la privacidad",
-  "Other": "Otro (por favor, especifique)"
+  "Other": "Otro (por favor, especifique)",
+  "user": "usuário"
 }

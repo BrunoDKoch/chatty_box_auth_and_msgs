@@ -380,7 +380,7 @@ public class MessagesHub : Hub {
     });
   }
 
-  // Searching chat
+  // Searching within chat
   async public Task SearchChat(string chatId, string? search, DateTime? startDate, DateTime? endDate, List<string> userIds, int skip) {
     await HandleException(async () => {
       var mainUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
@@ -388,6 +388,16 @@ public class MessagesHub : Hub {
       if (results is null) return;
       await Clients.Caller.SendAsync("chatSearchResults", new { messages = results.Messages, messageCount = results.MessageCount }, default);
     });
+  }
+
+  // Searching for a chat
+  async public Task<List<ChatPreview>> SearchForChat(string? chatName, string? userName) {
+    var result = await HandleException<List<ChatPreview>>(async () => {
+      var requestingUserId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var list = await _messagesDB.SearchForChats(chatName, userName, requestingUserId);
+      return list;
+    });
+    return result ?? new List<ChatPreview>();
   }
 
   // Chat settings
