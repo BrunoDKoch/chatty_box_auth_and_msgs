@@ -58,10 +58,11 @@ public class AdminDB {
     return reports;
   }
 
-  async public Task<List<UserReport>> ReadReports(int skip, int take, bool excludePending, bool violationsFound) {
+  async public Task<List<UserReport>> ReadReports(int skip, int take, bool excludePending) {
     using var ctx = new ChattyBoxContext();
     var reports = await ctx.UserReports
       .Include(r => r.ReportedUser)
+        .ThenInclude(u => u.ReportsAgainstUser.Where(r => r.ViolationFound == null || (bool)r.ViolationFound))
       .Include(r => r.ReportingUser)
       .Include(r => r.Chat)
       .Include(r => r.Message)
@@ -72,7 +73,6 @@ public class AdminDB {
         r.ViolationFound != null && (!(bool)r.ViolationFound) || r.AdminActions.Any() :
         r.ViolationFound == null || ((bool)r.ViolationFound && !r.AdminActions.Any())
       )
-      .Where(r => violationsFound ? r.ViolationFound != null && r.ViolationFound == violationsFound : true)
       .OrderByDescending(r => r.SentAt)
       .Skip(skip)
       .Take(take)

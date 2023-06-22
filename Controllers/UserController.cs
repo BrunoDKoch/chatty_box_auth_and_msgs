@@ -220,6 +220,7 @@ public class UserController : ControllerBase {
     return SignOut();
   }
 
+  [AllowAnonymous]
   [HttpGet("LoggedIn")]
   async public Task<IActionResult> CheckIfLoggedIn() {
     try {

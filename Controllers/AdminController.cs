@@ -71,14 +71,15 @@ public class AdminController : ControllerBase {
   async public Task<IActionResult> GetReports(
     [FromQuery] int skip,
     [FromQuery] int take,
-    [FromQuery] bool excludePending = false,
-    [FromQuery] bool violationsFound = false
+    [FromQuery] bool excludePending = false
   ) {
     var adminId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
     ArgumentNullException.ThrowIfNull(adminId);
-    var reports = await _adminDB.ReadReports(skip, take, excludePending, violationsFound);
+    var reports = await _adminDB.ReadReports(skip, take, excludePending);
     var response = reports.Select(r => new ReportResponse(r, adminId, _localizer)).ToList();
-    return Ok(response);
+    using var ctx = new ChattyBoxContext();
+    var total = await ctx.UserReports.Where(r => r.AdminActions.Any() != excludePending).CountAsync();
+    return Ok(new { reports = response, total });
   }
 
   [HttpPut("Reports/{id}")]
@@ -127,7 +128,7 @@ public class AdminController : ControllerBase {
       user.LockoutEnd = DateTimeOffset.MaxValue;
     else
       user.LockoutEnd = lockoutInfo.LockoutEnd;
-    
+
     user.LockoutReason = lockoutInfo.LockoutReason;
     await _userManager.UpdateAsync(user);
     return Ok();
@@ -154,10 +155,11 @@ public class AdminController : ControllerBase {
       .Where(u => u.LockoutEnd > DateTime.UtcNow)
       .Include(u => u.ReportsAgainstUser)
       .OrderByDescending(u => u.LockoutEnd)
-      .Skip(skip)
-      .Take(take)
       .Select(u => new ReportUserResponse(u, _localizer))
       .ToListAsync();
-    return Ok(suspendedUsers);
+    var users = suspendedUsers.Skip(skip)
+      .Take(take);
+    var total = suspendedUsers.Count();
+    return Ok(new { users, total });
   }
 }
