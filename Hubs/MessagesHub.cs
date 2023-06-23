@@ -1,13 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Concurrent;
 using ChattyBox.Database;
 using ChattyBox.Misc;
 using ChattyBox.Models;
-using ChattyBox.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
-using UAParser;
 using Microsoft.Extensions.Localization;
 
 namespace ChattyBox.Hubs;

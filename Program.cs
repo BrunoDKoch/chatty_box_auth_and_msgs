@@ -1,29 +1,23 @@
 using Microsoft.AspNetCore.Identity;
 using System.Text.Json.Serialization;
 using System.Text.Json;
-using System.Text;
-using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.CookiePolicy;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Context;
 using ChattyBox.Models;
 using ChattyBox.Hubs;
 using ChattyBox.Misc;
-using ChattyBox.Services;
 using MaxMind.GeoIP2;
 using SixLabors.ImageSharp.Web.DependencyInjection;
 using SixLabors.ImageSharp.Web.Providers;
 using SixLabors.ImageSharp.Web.Caching;
 using Microsoft.IdentityModel.Logging;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using Microsoft.AspNetCore.SignalR;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Localization;
 using ChattyBox.Localization;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.FileProviders;
 
 var reqOrigin = "_reqOrigin";
 
@@ -76,7 +70,11 @@ builder.Services.AddIdentity<User, Role>(options => {
   .AddTokenProvider<AuthenticatorTokenProvider<User>>(TokenOptions.DefaultAuthenticatorProvider)
   .AddTokenProvider<EmailTokenProvider<User>>(TokenOptions.DefaultEmailProvider);
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options => {
+  options.FallbackPolicy = new AuthorizationPolicyBuilder()
+    .RequireAuthenticatedUser()
+    .Build();
+});
 
 builder.Services.ConfigureApplicationCookie(options => {
   options.Cookie.Path = "/";
@@ -185,6 +183,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseImageSharp();
+
+app.UseStaticFiles(new StaticFileOptions {
+  FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "static")),
+  RequestPath = "/static"
+});
 
 app.MapControllers();
 

@@ -11,11 +11,8 @@ using MaxMind.GeoIP2;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using System.IdentityModel.Tokens.Jwt;
 using Humanizer;
 using Microsoft.Extensions.Localization;
-using System.Resources;
 
 namespace ChattyBox.Controllers;
 
@@ -339,9 +336,17 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> UploadImage(string chatId, [FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
-    var image = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
+    string[] validFileTypes = { "image", "video", "audio" };
+    if (!validFileTypes.Contains(file.ContentType.Split("/").First()))
+      throw new InvalidOperationException("invalid file type");
     var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, _maxMindClient);
-    var message = await messagesDB.CreateMessage(user.Id, chatId, image);
+    string filePath;
+    if (file.ContentType.StartsWith("image")) {
+      filePath = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
+    } else {
+      filePath = await AudioAndVideoService.SaveFile(file, chatId, user.Id);
+    }
+    var message = await messagesDB.CreateMessage(user.Id, chatId, filePath);
     await _hubContext.Clients.Group(chatId).SendAsync("newMessage", message, default);
     return Ok(message);
   }
