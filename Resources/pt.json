@@ -29,5 +29,13 @@
   "IntellectualPropertyInfringement": "Violação de propriedade intelectual",
   "PrivacyViolation": "Violação de privacidade",
   "Other": "Outro (por favor, especifique)",
-  "user": "usuário"
+  "user": "usuário",
+  "welcome": "Bem-vindo(a) ao ChattyBox!",
+  "confirmEmail": "Use o código abaixo para confirmar seu e-mail",
+  "actionRequired": "Ação necessária",
+  "confirmLocation": "Detectamos uma tentativa de login de um local novo. Se foi você mesmo, use o código abaixo para confirmar. Caso contrário, denuncie este incidente imediatamente.",
+  "changePassword": "Clique o link abaixo para mudar sua senha. Se você não pediu isto, denuncie imediatamente.",
+  "passwordButton": "Mudar sua senha",
+  "mfaWarning": "Atenção: Autenticação de múltiplos fatores desativada",
+  "mfaParagraph": "A autenticación de múltiplos fatores foi desativada. Se você não fez isso, denuncie imediatamente."
 }

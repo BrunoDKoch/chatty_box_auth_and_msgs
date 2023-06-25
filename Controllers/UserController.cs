@@ -29,6 +29,7 @@ public class UserController : ControllerBase {
   private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
   private readonly IStringLocalizer<UserController> _localizer;
+  private readonly EmailService _emailService;
 
   public UserController(
       UserManager<User> userManager,
@@ -38,7 +39,8 @@ public class UserController : ControllerBase {
       WebServiceClient maxMindClient,
       IWebHostEnvironment webHostEnvironment,
       IHubContext<MessagesHub> hubContext,
-      IStringLocalizer<UserController> localizer) {
+      IStringLocalizer<UserController> localizer,
+      EmailService emailService) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
@@ -47,6 +49,13 @@ public class UserController : ControllerBase {
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
     _localizer = localizer;
+    _emailService = emailService;
+  }
+
+  async private Task CreateCodeClaim(User user, string claimName) {
+    var otp = new Random().Next(100000, 999999).ToString();
+    var otpClaim = new Claim(claimName, otp);
+    await _userManager.AddClaimAsync(user, otpClaim);
   }
 
   async private Task<User> GetUser(string email) {
@@ -134,6 +143,10 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Register")]
   async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
+    // TODO: Add email confirmation logic
+    // For now, we'll just send the email confirmation code to the client
+    var otp = new Random().Next(100000, 999999).ToString();
+    await _emailService.SendEmail(data.Email, EmailType.EmailConfirmation, otp);
     var createdUser = new UserCreate(data);
     var result = await _userManager.CreateAsync(createdUser);
     if (result.Errors.Count() > 0) {
@@ -142,14 +155,10 @@ public class UserController : ControllerBase {
         return Unauthorized(string.Join("\n", result.Errors.Select(e => e.Description)));
       return Conflict(string.Join("\n", result.Errors.Select(e => e.Description)));
     }
-    foreach (var err in result.Errors) {
-      Console.WriteLine(err);
-    }
-    // TODO: Add email confirmation logic
-    // For now, we'll just send the email confirmation code to the client
-    var otp = new Random().Next(100000, 999999).ToString();
     var otpClaim = new Claim("OTP", otp);
     await _userManager.AddClaimAsync(createdUser, otpClaim);
+
+
     return Ok(otp);
   }
 
@@ -275,8 +284,12 @@ public class UserController : ControllerBase {
   [HttpPost("Recovery")]
   async public Task<IActionResult> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
     var user = await GetUser(request.Email);
+    ArgumentNullException.ThrowIfNull(user);
     // TODO: handle this via email
-    var token = _userManager.GeneratePasswordResetTokenAsync(user);
+    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+    await _emailService.SendEmail(
+      user.Email!, EmailType.PasswordResetConfirmation, emailAndToken: $"?email={user.Email!}&token={token}"
+    );
     return Ok(token);
   }
 
@@ -296,6 +309,7 @@ public class UserController : ControllerBase {
     if (!user.TwoFactorEnabled) throw new InvalidOperationException();
     // This will force open a modal to get the user's credentials, which will then call the POST method
     // TODO: inform user via email
+    await _emailService.SendEmail(user.Email!, EmailType.MFADisabledWarning);
     return Accepted();
   }
 

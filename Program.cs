@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Localization;
 using ChattyBox.Localization;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.FileProviders;
+using ChattyBox.Services;
 
 var reqOrigin = "_reqOrigin";
 
@@ -108,6 +109,7 @@ builder.Services.AddLocalization();
 builder.Services.AddSingleton<LocalizationMiddleware>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();
+builder.Services.AddSingleton<EmailService>();
 
 builder.Services.AddRateLimiter(options => {
   options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

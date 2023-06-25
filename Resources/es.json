@@ -29,5 +29,13 @@
   "IntellectualPropertyInfringement": "Infracción de propiedad intelectual",
   "PrivacyViolation": "Violación de la privacidad",
   "Other": "Otro (por favor, especifique)",
-  "user": "usuário"
+  "user": "usuário",
+  "welcome": "¡Bienvenido(a) a ChattyBox!",
+  "confirmEmail": "Use el código a continuación para confirmar su correo electrónico",
+  "actionRequired": "Acción requerida",
+  "confirmLocation": "Detectamos un intento de inicio de sesión de una nueva ubicación. Si este era usted, use el siguiente código para confirmarlo. De lo contrario, informe este incidente de inmediato.",
+  "changePassword": "Clica el link abajo para cambiar su contraseña. Si no solicitó esto, repórtelo de inmediato.",
+  "passwordButton": "Cambia tu contraseña",
+  "mfaWarning": "Advertencia: autenticación multifactor discapacitada",
+  "mfaParagraph": "La autenticación multifactor ha sido deshabilitada. Si no es responsable de esto, repórtelo de inmediato."
 }

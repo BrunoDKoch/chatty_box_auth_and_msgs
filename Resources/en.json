@@ -30,5 +30,13 @@
   "IntellectualPropertyInfringement": "Intellectual property infringement",
   "PrivacyViolation": "Privacy violation",
   "Other": "Other (please specify)",
-  "user": "user"
+  "user": "user",
+  "welcome": "Welcome to ChattyBox!",
+  "confirmEmail": "Use the code below to confirm your email",
+  "actionRequired": "Action required",
+  "confirmLocation": "We have detected a login attempt from a new location. If this was you, use the code below to confirm it. Otherwise, report this incident immediately.",
+  "changePassword": "Use click the link below to change your password. If you didn't request this, report it immediately.",
+  "passwordButton": "Change your password",
+  "mfaWarning": "Warning: Multi-Factor Authentication disabled",
+  "mfaParagraph": "Multi-factor authentication has been disabled. If you're not responsible for this, report it immediately."
 }
