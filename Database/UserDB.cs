@@ -85,27 +85,29 @@ public class UserDB {
     return user.Blocking.Select(b => new UserPartialResponse(b, userId)).ToList();
   }
 
-  async public Task<List<UserPartialResponse>> GetUsers(string userId, string userName) {
+  async public Task<List<UserPartialResponse>> GetUsers(string userId, UserSearchCall searchCall) {
     // Ensuring the user doesn't somehow search for themselves by adding an ID filter
     var currentUser = await _userManager.FindByIdAsync(userId);
+    ArgumentNullException.ThrowIfNull(currentUser);
     var users = await _userManager.Users
       .Include(u => u.ClientConnections)
       .Include(u => u.Friends)
       .Include(u => u.IsFriendsWith)
       .Include(u => u.Chats)
       .Where(
-        u => u.NormalizedUserName!.StartsWith(userName.ToUpper()) &&
+        u => u.NormalizedUserName!.StartsWith(searchCall.UserName.ToUpper()) &&
         !u.Blocking.Any(b => b.Id == userId) &&
+        (!u.Chats.Any() || !u.Chats.Any(c => c.Id == searchCall.ChatId)) &&
         u.Id != userId && (
           u.PrivacyLevel == 1 || (
             u.PrivacyLevel == 2 && (
-              u.Chats.Any(c => c.Users.Contains(currentUser!)) ||
-              u.Friends.Contains(currentUser!) ||
-              u.IsFriendsWith.Contains(currentUser!)
+              u.Chats.Any(c => c.Users.Contains(currentUser)) ||
+              u.Friends.Contains(currentUser) ||
+              u.IsFriendsWith.Contains(currentUser)
             )
           ) || (
             u.PrivacyLevel == 3 && (
-              u.Friends.Contains(currentUser!) || u.IsFriendsWith.Contains(currentUser!)
+              u.Friends.Contains(currentUser) || u.IsFriendsWith.Contains(currentUser)
             )
           )
         )

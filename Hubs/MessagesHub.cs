@@ -118,7 +118,7 @@ public class MessagesHub : Hub {
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
         var user = await _userDB.GetPreliminaryConnectionCallInfo(id);
-        
+
         // Add to admin group
         if (user.Roles.Any() && user.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER"))
           await Groups.AddToGroupAsync(this.Context.ConnectionId, "admins", default);
@@ -281,12 +281,12 @@ public class MessagesHub : Hub {
     });
   }
 
-  async public Task SearchUser(string userName) {
-    await HandleException(async () => {
+  async public Task<List<UserPartialResponse>> SearchUser(UserSearchCall searchCall) {
+    return await HandleException<List<UserPartialResponse>>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var results = await _userDB.GetUsers(userId, userName);
-      await Clients.Caller.SendAsync("searchResults", results, default);
-    });
+      var results = await _userDB.GetUsers(userId, searchCall);
+      return results;
+    }) ?? new List<UserPartialResponse>();
   }
 
   async public Task SendFriendRequest(string addedId) {

@@ -407,7 +407,7 @@ public class ReportUserResponse : UserPartialResponse {
   public string LockoutEnd;
   public ReportUserResponse(User user, IStringLocalizer<AdminController> localizer) : base(user) {
     if (user.LockoutEnd is null) LockoutEnd = String.Empty;
-    else LockoutEnd = user.LockoutEnd == DateTimeOffset.MaxValue ? 
+    else LockoutEnd = user.LockoutEnd == DateTimeOffset.MaxValue ?
       localizer.GetString("PermanentSuspension")! :
       $"{localizer.GetString("TemporarySuspension")} {TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize()}";
     PastViolations =
@@ -460,4 +460,9 @@ public class AdminActionRequest {
   public bool PermanentLockout = false;
   public DateTime? LockoutEnd;
   public bool ViolationFound = false;
+}
+
+public class UserSearchCall {
+  public string UserName { get; set; } = null!;
+  public string? ChatId { get; set; } = null!;
 }
