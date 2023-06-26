@@ -136,7 +136,7 @@ public class MessagesDB {
     return new ChatMessage(newMessage, fromId);
   }
 
-  async public Task<CompleteChatResponse> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
+  async public Task<Chat> CreateChat(string mainUserId, List<string> userIds, string? name, int? maxUsers) {
     using var ctx = new ChattyBoxContext();
     var newChat = new Chat {
       Id = Guid.NewGuid().ToString(),
@@ -148,8 +148,7 @@ public class MessagesDB {
     };
     await ctx.Chats.AddAsync(newChat);
     await ctx.SaveChangesAsync();
-    var chatResponse = new CompleteChatResponse(newChat, new List<ChatMessage>(), 0);
-    return chatResponse;
+    return newChat;
   }
 
   async public Task<SystemMessage> CreateSystemMessage(string instigatingUserId, string chatId, string eventType, string? affectedUserId = null) {

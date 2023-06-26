@@ -357,14 +357,16 @@ public class MessagesHub : Hub {
   }
 
   // Chat creation
-  async public Task CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
-    await HandleException(async () => {
+  async public Task<CompleteChatResponse?> CreateNewChat(List<string> userIds, string? name, int? maxUsers) {
+    return await HandleException<CompleteChatResponse>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var chat = await _messagesDB.CreateChat(userId, userIds, name, maxUsers);
+      var chatResponse = new ChatPreview(chat);
+      await Clients.Users(userIds.AsReadOnly()).SendAsync("newChat", chatResponse, default);
       foreach (var connection in await _messagesDB.GetAllConnectionsToChat(chat.Id)) {
         await Groups.AddToGroupAsync(connection.ConnectionId, chat.Id, default);
-        await Clients.Group(chat.Id).SendAsync("newChat", chat, default);
       }
+      return new CompleteChatResponse(chat, new List<ChatMessage>(), 0);
     });
   }
 

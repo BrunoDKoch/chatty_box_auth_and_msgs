@@ -59,6 +59,7 @@ public class UserDB {
           .ThenInclude(m => m.ReadBy)
       .Include(u => u.Blocking)
       .Include(u => u.FriendRequestsReceived)
+        .ThenInclude(f => f.UserAdding)
       .Include(u => u.Roles)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);

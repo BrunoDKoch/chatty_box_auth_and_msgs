@@ -163,6 +163,7 @@ public class ChatPreview {
   public DateTime CreatedAt { get; set; }
   public bool? ShowOSNotification { get; set; }
   public bool? PlaySound { get; set; }
+
   public ChatPreview(Chat chat, string userId) {
     Id = chat.Id;
     ChatName = chat.ChatName;
@@ -187,6 +188,17 @@ public class ChatPreview {
       ShowOSNotification = null;
       PlaySound = null;
     }
+  }
+
+  // Empty chat
+  public ChatPreview(Chat chat) {
+    Id = chat.Id;
+    ChatName = chat.ChatName;
+    LastMessage = null;
+    Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
+    CreatedAt = chat.CreatedAt;
+    ShowOSNotification = null;
+    PlaySound = null;
   }
 }
 
