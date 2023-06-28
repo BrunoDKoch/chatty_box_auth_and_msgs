@@ -270,7 +270,7 @@ public class MessagesHub : Hub {
       var friends = await _userDB.GetAnUsersFriends(id);
       await Clients.Caller.SendAsync(
         "friends",
-        friends.Select(f => new FriendsResponse(f, id)),
+        friends.Select(f => new FriendResponse(f, id)),
         default
       );
       foreach (var friend in friends) {
@@ -327,7 +327,7 @@ public class MessagesHub : Hub {
           await AddToFriendsGroup(addingId, user.ClientConnections.Select(c => c.ConnectionId).ToList());
           await Clients.User(addingId).SendAsync("newFriend", response, default);
         }
-        await Clients.User(userId).SendAsync("newFriend", new FriendsResponse(user, true, userId), default);
+        await Clients.User(userId).SendAsync("newFriend", new FriendResponse(user, true, userId), default);
       }
     });
   }
@@ -464,14 +464,13 @@ public class MessagesHub : Hub {
     });
   }
 
-  async public Task GetMFASettings() {
-    await HandleException(async () => {
+  async public Task<bool> GetMFASettings() {
+    return await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
       ArgumentNullException.ThrowIfNull(user);
       var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
-      var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
-      await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled, providers }, default);
+      return isEnabled;
     });
   }
 
@@ -499,9 +498,24 @@ public class MessagesHub : Hub {
     var result = await HandleException<List<ClientConnectionPartialInfo>>(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var connections = await _messagesDB.GetClientConnections(userId);
-      return connections.Select(c => new ClientConnectionPartialInfo(c)).ToList();
+      return connections.Select(c => new ClientConnectionPartialInfo(c, Context.ConnectionId)).ToList();
     });
     return result ?? new List<ClientConnectionPartialInfo>();
+  }
+
+  async public Task CloseConnection(List<string> ids) {
+    await HandleException(async() => {
+      var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
+      var user = await _userManager.FindByIdAsync(userId);
+      ArgumentNullException.ThrowIfNull(user);
+      var relevantConnections = await _messagesDB.DeleteConnections(ids);
+      ArgumentNullException.ThrowIfNull(relevantConnections);
+      foreach (var relevantConnection in relevantConnections) {
+      if (relevantConnection.Active)
+        await Clients.Client(relevantConnection.ConnectionId).SendAsync("forceLogOut");
+      }
+      await _userManager.UpdateSecurityStampAsync(user);
+    });
   }
 
   // Privacy
@@ -547,11 +561,16 @@ public class MessagesHub : Hub {
   async public Task ChangeUserName(string userName) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
+      var user =
+        await _userManager.Users
+        .Include(u => u.Chats)
+        .FirstOrDefaultAsync(u => u.Id == userId);
       ArgumentNullException.ThrowIfNull(user);
       user.UserName = userName;
       await _userManager.UpdateAsync(user);
       await Clients.Caller.SendAsync("userName", user.UserName, default);
+      var groups = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{userId}_friends" });
+      await Clients.Groups(groups).SendAsync("newUserName", new { userId, userName }, default);
     });
   }
 

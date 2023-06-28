@@ -29,7 +29,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddCors(options => {
   options.AddPolicy(name: reqOrigin, policy => {
-    policy.WithOrigins("http://localhost:5173")
+    policy.WithOrigins(builder.Configuration.GetValue<string>("WebsiteUrl")!)
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials();
@@ -115,6 +115,8 @@ builder.Services.AddRateLimiter(options => {
   options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
+builder.WebHost.UseSentry();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -123,6 +125,10 @@ if (app.Environment.IsDevelopment()) {
   app.UseSwaggerUI();
   IdentityModelEventSource.ShowPII = true;
 }
+
+app.UseHsts();
+
+app.UseHttpsRedirection();
 
 app.UseRateLimiter();
 
@@ -146,7 +152,7 @@ app.UseExceptionHandler(exceptionHandler => {
     var ex = context.Features.Get<IExceptionHandlerPathFeature>();
     if (ex is not null) {
       Console.ForegroundColor = ConsoleColor.Red;
-      Console.WriteLine(context.Request.Path.Value);
+      Console.Error.WriteLine(context.Request.Path.Value);
       Console.ResetColor();
       if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("/api/v1/User")) {
         if (ex.Error.GetType().ToString() == "ArgumentNullException") {
@@ -169,10 +175,6 @@ app.UseExceptionHandler(exceptionHandler => {
     }
   });
 });
-
-app.UseHsts();
-
-app.UseHttpsRedirection();
 
 app.UsePathBase(new PathString("/api/v1"));
 

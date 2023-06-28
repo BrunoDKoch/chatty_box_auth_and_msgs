@@ -234,7 +234,7 @@ public class MessagesDB {
     using var ctx = new ChattyBoxContext();
     try {
       var clientConnection = await ctx.ClientConnections
-        .Where(c => c.UserId == userId && c.Active)
+        .Where(c => c.UserId == userId)
         .ToListAsync();
       return clientConnection;
     } catch (InvalidOperationException) {
@@ -299,6 +299,13 @@ public class MessagesDB {
         .Select(c => new ChatPreview(c, requestingUserId))
         .ToListAsync();
     return chats;
+  }
+
+  async public Task<ClientConnection> GetClientConnection(string id) {
+    using var ctx = new ChattyBoxContext();
+    var clientConnection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.Id == id);
+    ArgumentNullException.ThrowIfNull(clientConnection);
+    return clientConnection;
   }
 
   // Update
@@ -443,11 +450,20 @@ public class MessagesDB {
     return true;
   }
 
-  async public Task DeleteConnection(string connectionId) {
+  async public Task<ClientConnection> DeleteConnection(string connectionId) {
     using var ctx = new ChattyBoxContext();
     var connection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.ConnectionId == connectionId);
     ArgumentNullException.ThrowIfNull(connection);
     ctx.Remove(connection);
     await ctx.SaveChangesAsync();
+    return connection;
+  }
+
+  async public Task<List<ClientConnection>> DeleteConnections(List<string> connectionIds) {
+    using var ctx = new ChattyBoxContext();
+    var relevantConnections = await ctx.ClientConnections.Where(c => connectionIds.Contains(c.Id)).ToListAsync();
+    ctx.ClientConnections.RemoveRange(relevantConnections);
+    await ctx.SaveChangesAsync();
+    return relevantConnections;
   }
 }

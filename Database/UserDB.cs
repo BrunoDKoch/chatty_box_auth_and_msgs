@@ -2,6 +2,7 @@ using ChattyBox.Models;
 using ChattyBox.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 
 namespace ChattyBox.Database;
 
@@ -57,6 +58,8 @@ public class UserDB {
       .Include(u => u.Chats)
         .ThenInclude(c => c.Messages)
           .ThenInclude(m => m.ReadBy)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Users.Where(u => u.Id != userId))
       .Include(u => u.Blocking)
       .Include(u => u.FriendRequestsReceived)
         .ThenInclude(f => f.UserAdding)
@@ -152,7 +155,7 @@ public class UserDB {
       .ToListAsync();
     var total = await ctx.UserLoginAttempts.Where(ul => ul.UserId == userId).CountAsync();
     return new LoginAttemptsResponse {
-      UserLoginAttempts = attempts,
+      UserLoginAttempts = attempts.Select(a => new LoginAttemptPartial(a)).ToList(),
       Count = total
     };
   }
@@ -171,6 +174,7 @@ public class UserDB {
         .ThenInclude(f => f.UserBeingAdded)
       .Include(u => u.FriendRequestsReceived)
         .ThenInclude(f => f.UserAdding)
+      .Include(u => u.Roles)
       .Include(u => u.Blocking)
       .Include(u => u.BlockedBy)
       .Include(u => u.Chats.Where(c => !String.IsNullOrEmpty(c.ChatName)))
@@ -181,23 +185,51 @@ public class UserDB {
     return response;
   }
 
+  async public Task<UserPersonalInfo> GetUserPersonalInfo(HttpContext httpContext) {
+    var userClaim = httpContext.User;
+    ArgumentNullException.ThrowIfNull(userClaim);
+    var userId = userClaim.FindFirstValue(ClaimTypes.NameIdentifier);
+    ArgumentNullException.ThrowIfNullOrEmpty(userId);
+    var user = await _userManager.Users
+      .Include(u => u.Friends)
+        .ThenInclude(f => f.Friends)
+      .Include(u => u.Friends)
+        .ThenInclude(f => f.IsFriendsWith)
+      .Include(u => u.IsFriendsWith)
+        .ThenInclude(f => f.Friends)
+      .Include(u => u.IsFriendsWith)
+        .ThenInclude(f => f.IsFriendsWith)
+      .Include(u => u.FriendRequestsSent)
+        .ThenInclude(f => f.UserBeingAdded)
+      .Include(u => u.FriendRequestsReceived)
+        .ThenInclude(f => f.UserAdding)
+      .Include(u => u.Roles)
+      .Include(u => u.Blocking)
+      .Include(u => u.BlockedBy)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Users)
+      .FirstOrDefaultAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
+    return new UserPersonalInfo(user);
+  }
+
   // Update
 
-  async public Task<FriendsResponse?> HandleFriendRequest(string userId, string addingId, bool accepting) {
+  async public Task<FriendResponse?> HandleFriendRequest(string userId, string addingId, bool accepting) {
     using var ctx = new ChattyBoxContext();
     ctx.FriendRequests.Remove(
       await ctx.FriendRequests.FirstAsync(f => f.UserBeingAddedId == userId && f.UserAddingId == addingId)
     );
-    FriendsResponse? friendsResponse = null;
+    FriendResponse? FriendResponse = null;
     if (accepting) {
       var adding = await ctx.Users.FirstAsync(u => u.Id == addingId);
       var user = await ctx.Users.FirstAsync(u => u.Id == userId);
       adding.Friends.Add(user);
       user.IsFriendsWith.Add(adding);
-      friendsResponse = new FriendsResponse(user, true, addingId);
+      FriendResponse = new FriendResponse(user, true, addingId);
     }
     await ctx.SaveChangesAsync();
-    return friendsResponse;
+    return FriendResponse;
   }
 
   async public Task<UserNotificationSetting> UpdateUserNotificationSettings(string userId, bool playSound, bool showOSNotification, bool showAlert) {

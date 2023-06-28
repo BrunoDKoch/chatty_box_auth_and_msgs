@@ -177,7 +177,7 @@ public class ChatPreview {
       })
       .FirstOrDefault()
       : null;
-    Users = chat.Users.Select(u => new UserPartialResponse(u)).ToList();
+    Users = chat.Users.Where(u => u.Id != userId).Select(u => new UserPartialResponse(u)).ToList();
     CreatedAt = chat.CreatedAt;
     if (chat.ChatNotificationSettings != null && chat.ChatNotificationSettings.Any()) {
       var chatNotificationSetting =
@@ -248,6 +248,7 @@ public class UserDetailedResponse : UserPartialResponse {
   public bool IsFriend;
   public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
   public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
+  public bool IsAdmin;
 
   public UserDetailedResponse(User user, string requestingUserId) : base(user, requestingUserId) {
     FriendRequestPending =
@@ -259,14 +260,28 @@ public class UserDetailedResponse : UserPartialResponse {
       .Where(c => c.Users.Any(u => u.Id == requestingUserId))
       .Select(c => new ChatBasicInfo(c))
       .ToList();
+    
   }
 }
 
-public class FriendsResponse : UserPartialResponse {
-  public FriendsResponse(User user, bool isOnline, string requestingUserId) : base(user, requestingUserId) {
+public class UserPersonalInfo : UserPartialResponse {
+  public List<UserPartialResponse> FriendRequests;
+  public List<FriendResponse> Friends;
+  public List<ChatPreview> Previews;
+  public bool IsAdmin;
+  public UserPersonalInfo(User user) : base(user) {
+    FriendRequests = user.FriendRequestsReceived.Select(f => new UserPartialResponse(f.UserAdding)).ToList();
+    Friends = user.Friends.Select(f => new FriendResponse(f, Id)).Concat(user.IsFriendsWith.Select(f => new FriendResponse(f, Id))).ToList();
+    Previews = user.Chats.Select(c => new ChatPreview(c, Id)).ToList();
+    IsAdmin = user.Roles.Any(r => r.NormalizedName == "OWNER" || r.NormalizedName == "ADMIN");
+  }
+}
+
+public class FriendResponse : UserPartialResponse {
+  public FriendResponse(User user, bool isOnline, string requestingUserId) : base(user, requestingUserId) {
     IsOnline = isOnline;
   }
-  public FriendsResponse(User user, string requestingUserId) : base(user, requestingUserId) {
+  public FriendResponse(User user, string requestingUserId) : base(user, requestingUserId) {
     IsOnline = user.ClientConnections.Any(c => c.Active);
   }
   public bool IsOnline { get; set; }
@@ -286,8 +301,29 @@ public enum ImageSize {
   Full
 }
 
+public class LoginAttemptPartial {
+  public string Id;
+  public DateTime AttemptedAt;
+  public string CityName;
+  public string CountryIsoCode;
+  public string OS;
+  public string Browser;
+  public string Device;
+  public bool Success;
+  public LoginAttemptPartial(UserLoginAttempt loginAttempt) {
+    Id = loginAttempt.Id;
+    AttemptedAt = loginAttempt.AttemptedAt;
+    CityName = loginAttempt.CityName;
+    CountryIsoCode = loginAttempt.CountryIsoCode;
+    OS = string.Join(' ', loginAttempt.OS.Split(' ').Distinct()).Humanize();
+    Browser = string.Join(' ', loginAttempt.Browser.Split(' ').Distinct());
+    Device = string.Join(' ', loginAttempt.Device.Split(' ').Distinct());
+    Success = loginAttempt.Success;
+  }
+}
+
 public class LoginAttemptsResponse {
-  public List<UserLoginAttempt> UserLoginAttempts = new List<UserLoginAttempt>();
+  public List<LoginAttemptPartial> UserLoginAttempts = new List<LoginAttemptPartial>();
   public int Count { get; set; }
 }
 
@@ -336,6 +372,7 @@ public class MessageReadInformationResponse {
 }
 
 public class ClientConnectionPartialInfo {
+  public string Id;
   public string UserId;
   public string ConnectionId;
   public string Browser;
@@ -347,20 +384,23 @@ public class ClientConnectionPartialInfo {
   public string IpAddress;
   public string Os;
   public bool Active;
+  public bool IsCurrentSession;
   public DateTime CreatedAt;
-  public ClientConnectionPartialInfo(ClientConnection connection) {
+  public ClientConnectionPartialInfo(ClientConnection connection, string currentConnectionId) {
+    Id = connection.Id;
     UserId = connection.UserId;
     ConnectionId = connection.ConnectionId;
     Browser = connection.Browser;
     CityName = connection.CityName;
     CountryIsoCode = connection.CountryIsoCode;
     CountryName = connection.CountryName;
-    Device = connection.Device;
+    Device = connection.Device.Truncate(20);
     GeoNameId = connection.GeoNameId;
     IpAddress = connection.IpAddress;
-    Os = connection.Os;
+    Os = connection.Os.Humanize();
     Active = connection.Active;
     CreatedAt = connection.CreatedAt;
+    IsCurrentSession = connection.ConnectionId == currentConnectionId;
   }
 }
 
@@ -369,7 +409,7 @@ public class UserConnectionCallInfo {
   public string? Avatar;
   public string UserName;
   public string Email;
-  public List<FriendsResponse> Friends;
+  public List<FriendResponse> Friends;
   public List<FriendRequestFiltered> FriendRequests;
   public List<UserPartialResponse> Blocks;
   public List<ChatPreview> Previews;
@@ -379,8 +419,8 @@ public class UserConnectionCallInfo {
     UserName = user.UserName!;
     Email = user.Email!;
     Friends =
-      user.Friends.Select(f => new FriendsResponse(f, Id)).ToList()
-      .Concat(user.IsFriendsWith.Select(f => new FriendsResponse(f, f.ClientConnections.Any(c => c.Active), Id)).ToList())
+      user.Friends.Select(f => new FriendResponse(f, Id)).ToList()
+      .Concat(user.IsFriendsWith.Select(f => new FriendResponse(f, f.ClientConnections.Any(c => c.Active), Id)).ToList())
       .ToList();
     FriendRequests = user.FriendRequestsReceived.Select(fr => new FriendRequestFiltered {
       UserAdding = new UserPartialResponse(fr.UserAdding, Id)

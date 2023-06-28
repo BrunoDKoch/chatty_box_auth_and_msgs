@@ -30,6 +30,7 @@ public class UserController : ControllerBase {
   private readonly IHubContext<MessagesHub> _hubContext;
   private readonly IStringLocalizer<UserController> _localizer;
   private readonly EmailService _emailService;
+  private readonly UserDB _userDb;
 
   public UserController(
       UserManager<User> userManager,
@@ -50,6 +51,7 @@ public class UserController : ControllerBase {
     _hubContext = hubContext;
     _localizer = localizer;
     _emailService = emailService;
+    _userDb = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
   async private Task CreateCodeClaim(User user, string claimName) {
@@ -110,9 +112,9 @@ public class UserController : ControllerBase {
       CountryIsoCode = city.Country.IsoCode ?? "unknown",
       Latitude = (double)city.Location.Latitude!,
       Longitude = (double)city.Location.Longitude!,
-      OS = $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}",
-      Device = $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}",
-      Browser = $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}"
+      OS = string.Join(' ', $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}".Split(' ').Distinct()),
+      Device = string.Join(' ', $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}".Split(' ').Distinct()),
+      Browser = string.Join(' ', $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}".Split(' ').Distinct())
     };
     return loginAttempt;
   }
@@ -137,6 +139,12 @@ public class UserController : ControllerBase {
 
     loginAttempt.Success = signInSuccess.Succeeded;
     return loginAttempt;
+  }
+
+  async private Task SendAvatarUpdateMessage(string userId, string avatar, IEnumerable<string> usersToNotify) {
+    await _hubContext.Clients
+      .Groups(usersToNotify)
+      .SendAsync("newAvatar", new { userId, avatar }, default);
   }
 
   // Auth
@@ -216,6 +224,12 @@ public class UserController : ControllerBase {
     await _signInManager.RefreshSignInAsync(user);
     if (!String.IsNullOrEmpty(ReturnUrl)) return Redirect(ReturnUrl);
     return Ok();
+  }
+
+  [HttpGet]
+  async public Task<IActionResult> GetUser() {
+    var user = await _userDb.GetUserPersonalInfo(HttpContext);
+    return Ok(user);
   }
 
   [HttpHead("Logout")]
@@ -327,11 +341,17 @@ public class UserController : ControllerBase {
   // Images
   [HttpPost("Avatar")]
   async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
-    var user = await _userManager.GetUserAsync(HttpContext.User);
+    var user =
+      await _userManager.Users
+        .Include(u => u.Chats)
+        .FirstOrDefaultAsync(u => u.Id == HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
     ArgumentNullException.ThrowIfNull(user);
     var avatar = await ImageService.SaveImage(file, user, _webHostEnvironment, isAvatar: true);
     user.Avatar = avatar;
     await _userManager.UpdateAsync(user);
+
+    var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
+    await SendAvatarUpdateMessage(user.Id, avatar, groupsToNotify);
     return Ok(avatar);
   }
 
@@ -343,6 +363,9 @@ public class UserController : ControllerBase {
     ImageService.DeleteImage(user.Avatar);
     user.Avatar = String.Empty;
     await _userManager.UpdateAsync(user);
+    
+    var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
+    await SendAvatarUpdateMessage(user.Id, avatar: String.Empty, groupsToNotify);
     return Ok();
   }
 
@@ -350,6 +373,9 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> UploadImage(string chatId, [FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
+    if (file.Length.Megabytes() > (20).Megabytes()) {
+      throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
+    }
     string[] validFileTypes = { "image", "video", "audio" };
     if (!validFileTypes.Contains(file.ContentType.Split("/").First()))
       throw new InvalidOperationException("invalid file type");

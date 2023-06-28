@@ -8,3 +8,5 @@ static/
 cache/
 *.jpg
 *.meta
+*.crt
+*.key
