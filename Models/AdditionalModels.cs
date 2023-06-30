@@ -260,19 +260,21 @@ public class UserDetailedResponse : UserPartialResponse {
       .Where(c => c.Users.Any(u => u.Id == requestingUserId))
       .Select(c => new ChatBasicInfo(c))
       .ToList();
-    
+
   }
 }
 
 public class UserPersonalInfo : UserPartialResponse {
-  public List<UserPartialResponse> FriendRequests;
+  public List<FriendRequestFiltered> FriendRequests;
   public List<FriendResponse> Friends;
   public List<ChatPreview> Previews;
+  public List<UserPartialResponse> Blocks;
   public bool IsAdmin;
   public UserPersonalInfo(User user) : base(user) {
-    FriendRequests = user.FriendRequestsReceived.Select(f => new UserPartialResponse(f.UserAdding)).ToList();
+    FriendRequests = user.FriendRequestsReceived.Select(f => new FriendRequestFiltered { UserAdding = new UserPartialResponse(f.UserAdding) }).ToList();
     Friends = user.Friends.Select(f => new FriendResponse(f, Id)).Concat(user.IsFriendsWith.Select(f => new FriendResponse(f, Id))).ToList();
     Previews = user.Chats.Select(c => new ChatPreview(c, Id)).ToList();
+    Blocks = user.Blocking.Select(b => new UserPartialResponse(b)).ToList();
     IsAdmin = user.Roles.Any(r => r.NormalizedName == "OWNER" || r.NormalizedName == "ADMIN");
   }
 }
@@ -404,32 +406,10 @@ public class ClientConnectionPartialInfo {
   }
 }
 
-public class UserConnectionCallInfo {
-  public string Id;
-  public string? Avatar;
-  public string UserName;
-  public string Email;
-  public List<FriendResponse> Friends;
-  public List<FriendRequestFiltered> FriendRequests;
-  public List<UserPartialResponse> Blocks;
-  public List<ChatPreview> Previews;
-  public UserConnectionCallInfo(User user) {
-    Id = user.Id;
-    Avatar = user.Avatar;
-    UserName = user.UserName!;
-    Email = user.Email!;
-    Friends =
-      user.Friends.Select(f => new FriendResponse(f, Id)).ToList()
-      .Concat(user.IsFriendsWith.Select(f => new FriendResponse(f, f.ClientConnections.Any(c => c.Active), Id)).ToList())
-      .ToList();
-    FriendRequests = user.FriendRequestsReceived.Select(fr => new FriendRequestFiltered {
-      UserAdding = new UserPartialResponse(fr.UserAdding, Id)
-    }).ToList();
-    Blocks = user.Blocking.Select(b => new UserPartialResponse(b)).ToList();
-    Previews = user.Chats
-      .Select(c => new ChatPreview(c, Id))
-      .OrderByDescending(c => c.LastMessage is null ? c.CreatedAt : c.LastMessage.SentAt)
-      .ToList();
+public class UserConnectionCallInfo : UserPersonalInfo {
+
+  public UserConnectionCallInfo(User user) : base(user) {
+
   }
 }
 
@@ -517,4 +497,15 @@ public class AdminActionRequest {
 public class UserSearchCall {
   public string UserName { get; set; } = null!;
   public string? ChatId { get; set; } = null!;
+}
+
+public class ChangeEmailRequest {
+  public string CurrentEmail { get; set; } = null!;
+  public string NewEmail { get; set; } = null!;
+  public string Password { get; set; } = null!;
+}
+
+public class ChangePasswordRequest {
+  public string CurrentPassword { get; set; } = null!;
+  public string NewPassword { get; set; } = null!;
 }

@@ -38,5 +38,7 @@
   "changePassword": "Use click the link below to change your password. If you didn't request this, report it immediately.",
   "passwordButton": "Change your password",
   "mfaWarning": "Warning: Multi-Factor Authentication disabled",
-  "mfaParagraph": "Multi-factor authentication has been disabled. If you're not responsible for this, report it immediately."
+  "mfaParagraph": "Multi-factor authentication has been disabled. If you're not responsible for this, report it immediately.",
+  "emailChanged": "Your email has changed. If you're not responsible for this, click the link below to undo this action.",
+  "passwordChanged": "Your password has changed. If you're not responsible for this, click the link below to undo this action."
 }

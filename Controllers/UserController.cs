@@ -150,7 +150,7 @@ public class UserController : ControllerBase {
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
-  async public Task<IActionResult> RegisterUser([FromBody] UserInitialData data) {
+  async public Task<ActionResult<string>> RegisterUser([FromBody] UserInitialData data) {
     // TODO: Add email confirmation logic
     // For now, we'll just send the email confirmation code to the client
     var otp = new Random().Next(100000, 999999).ToString();
@@ -216,6 +216,40 @@ public class UserController : ControllerBase {
     return StatusCode(StatusCodes.Status302Found);
   }
 
+  [HttpPut("Change/Email")]
+  async public Task<ActionResult> ChangeEmail([FromBody] ChangeEmailRequest body) {
+    var user = await GetUser(HttpContext);
+    if (user.NormalizedEmail != body.CurrentEmail.ToUpper())
+      return Unauthorized();
+    var passwordIsValid = await _userManager.CheckPasswordAsync(user, body.Password);
+    if (!passwordIsValid) return Unauthorized();
+
+    // Generate a token for undoing this, and send it to old email
+    var token = await _userManager.GenerateChangeEmailTokenAsync(user, body.NewEmail);
+    await _emailService.SendEmail(user.Email!, EmailType.EmailChangedWarning, itemAndToken: $"?email={user.Email!}&token={token}");
+
+    // Then, set the new email
+    await _userManager.SetEmailAsync(user, body.NewEmail);
+    return Ok();
+  }
+
+  [HttpPatch("Change/Email")]
+  async public Task<RedirectResult> UndoChangeEmail([FromQuery] string email, [FromQuery] string token) {
+    var user = await GetUser(email);
+    await _userManager.ChangeEmailAsync(user, email, token);
+    await _userManager.UpdateSecurityStampAsync(user);
+    await _hubContext.Clients.User(user.Id).SendAsync("forceLogOut", default);
+    return Redirect(_configuration.GetValue<string>("WebsiteUrl")!);
+  }
+
+  [HttpPut("Change/Password")]
+  async public Task<ActionResult> ChangePassword([FromBody] ChangePasswordRequest body) {
+    var user = await GetUser(HttpContext);
+    var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
+    if (result.Succeeded) return Ok();
+    return Unauthorized();
+  }
+
   [HttpGet("Login")]
   async public Task<IActionResult> RefreshLogin([FromQuery] string? ReturnUrl) {
     var userClaim = HttpContext.User;
@@ -227,7 +261,7 @@ public class UserController : ControllerBase {
   }
 
   [HttpGet]
-  async public Task<IActionResult> GetUser() {
+  async public Task<ActionResult<UserPersonalInfo>> GetUser() {
     var user = await _userDb.GetUserPersonalInfo(HttpContext);
     return Ok(user);
   }
@@ -242,7 +276,7 @@ public class UserController : ControllerBase {
 
   [AllowAnonymous]
   [HttpGet("LoggedIn")]
-  async public Task<IActionResult> CheckIfLoggedIn() {
+  async public Task<ActionResult<bool?>> CheckIfLoggedIn() {
     try {
       var userClaim = HttpContext.User;
       ArgumentNullException.ThrowIfNull(userClaim);
@@ -296,20 +330,20 @@ public class UserController : ControllerBase {
 
   [AllowAnonymous]
   [HttpPost("Recovery")]
-  async public Task<IActionResult> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
+  async public Task<ActionResult<string>> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
     var user = await GetUser(request.Email);
     ArgumentNullException.ThrowIfNull(user);
     // TODO: handle this via email
     var token = await _userManager.GeneratePasswordResetTokenAsync(user);
     await _emailService.SendEmail(
-      user.Email!, EmailType.PasswordResetConfirmation, emailAndToken: $"?email={user.Email!}&token={token}"
+      user.Email!, EmailType.PasswordResetConfirmation, itemAndToken: $"?email={user.Email!}&token={token}"
     );
     return Ok(token);
   }
 
   [AllowAnonymous]
   [HttpPut("Recovery")]
-  async public Task<IActionResult> RecoverPassword([FromBody] PasswordResetRequest request) {
+  async public Task<ActionResult<string>> RecoverPassword([FromBody] PasswordResetRequest request) {
     var user = await GetUser(request.Email);
     var result = await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
     if (!result.Succeeded) return Unauthorized();
@@ -340,7 +374,7 @@ public class UserController : ControllerBase {
 
   // Images
   [HttpPost("Avatar")]
-  async public Task<IActionResult> SaveAvatar([FromForm] IFormFile file) {
+  async public Task<ActionResult<string>> SaveAvatar([FromForm] IFormFile file) {
     var user =
       await _userManager.Users
         .Include(u => u.Chats)
@@ -363,14 +397,14 @@ public class UserController : ControllerBase {
     ImageService.DeleteImage(user.Avatar);
     user.Avatar = String.Empty;
     await _userManager.UpdateAsync(user);
-    
+
     var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
     await SendAvatarUpdateMessage(user.Id, avatar: String.Empty, groupsToNotify);
     return Ok();
   }
 
   [HttpPost("Upload/{chatId}")]
-  async public Task<IActionResult> UploadImage(string chatId, [FromForm] IFormFile file) {
+  async public Task<ActionResult<ChatMessage>> UploadImage(string chatId, [FromForm] IFormFile file) {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
     if (file.Length.Megabytes() > (20).Megabytes()) {

@@ -37,5 +37,7 @@
   "changePassword": "Clica el link abajo para cambiar su contraseña. Si no solicitó esto, repórtelo de inmediato.",
   "passwordButton": "Cambia tu contraseña",
   "mfaWarning": "Advertencia: autenticación multifactor discapacitada",
-  "mfaParagraph": "La autenticación multifactor ha sido deshabilitada. Si no es responsable de esto, repórtelo de inmediato."
+  "mfaParagraph": "La autenticación multifactor ha sido deshabilitada. Si no es responsable de esto, repórtelo de inmediato.",
+  "emailChanged": "Tu correo electrónico ha cambiado. Si no es responsable de esto, haga clic en el siguiente enlace para deshacer esta acción.",
+  "passwordChanged": "Tu contraseña ha cambiado. Si no es responsable de esto, haga clic en el siguiente enlace para deshacer esta acción."
 }

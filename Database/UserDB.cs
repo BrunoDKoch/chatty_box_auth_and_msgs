@@ -185,7 +185,7 @@ public class UserDB {
     return response;
   }
 
-  async public Task<UserPersonalInfo> GetUserPersonalInfo(HttpContext httpContext) {
+  async public Task<UserConnectionCallInfo> GetUserPersonalInfo(HttpContext httpContext) {
     var userClaim = httpContext.User;
     ArgumentNullException.ThrowIfNull(userClaim);
     var userId = userClaim.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -203,6 +203,7 @@ public class UserDB {
         .ThenInclude(f => f.UserBeingAdded)
       .Include(u => u.FriendRequestsReceived)
         .ThenInclude(f => f.UserAdding)
+      .Include(u => u.Blocking)
       .Include(u => u.Roles)
       .Include(u => u.Blocking)
       .Include(u => u.BlockedBy)
@@ -210,7 +211,7 @@ public class UserDB {
         .ThenInclude(c => c.Users)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
-    return new UserPersonalInfo(user);
+    return new UserConnectionCallInfo(user);
   }
 
   // Update

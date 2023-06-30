@@ -37,5 +37,7 @@
   "changePassword": "Clique o link abaixo para mudar sua senha. Se você não pediu isto, denuncie imediatamente.",
   "passwordButton": "Mudar sua senha",
   "mfaWarning": "Atenção: Autenticação de múltiplos fatores desativada",
-  "mfaParagraph": "A autenticación de múltiplos fatores foi desativada. Se você não fez isso, denuncie imediatamente."
+  "mfaParagraph": "A autenticación de múltiplos fatores foi desativada. Se você não fez isso, denuncie imediatamente.",
+  "emailChanged": "Seu e-mail foi alterado. Se você não fez isso, clique o link abaixo para desfazer esta ação.",
+  "passwordChanged": "Sua senha foi alterada. Se você não fez isso, clique o link abaixo para desfazer esta ação."
 }
