@@ -1,4 +1,5 @@
 {
+  "Error": "error",
   "400": "El servidor no pudo entender su solicitud. Por favor, asegúrese de haber proporcionado datos o parámetros válidos.",
   "403": "No tiene permiso para acceder al recurso solicitado.",
   "404": "No se pudo encontrar el recurso solicitado. Por favor, verifique la URL o compruebe si el recurso aún existe.",

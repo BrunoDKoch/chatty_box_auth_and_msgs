@@ -6,6 +6,7 @@ using ChattyBox.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Localization;
+using Humanizer;
 
 namespace ChattyBox.Hubs;
 
@@ -58,10 +59,10 @@ public class MessagesHub : Hub {
         message = $"{_localizer.GetString("DatabaseError").Value} {sqlException.Number}";
         break;
       default:
-        message = exception.HResult.ToString();
+        message = $"{_localizer.GetString("Error").Value.Titleize()} {exception.HResult.ToString()}";
         break;
     }
-    message += $"\n{_localizer.GetString("OurEnd").Value}.\n{_localizer.GetString("SupportPersists").Value}.";
+    message += $"\n{_localizer.GetString("OurEnd").Value}\n{_localizer.GetString("SupportPersists").Value}";
     await Clients.Caller.SendAsync(errorToSend, message, default);
   }
 
@@ -89,7 +90,7 @@ public class MessagesHub : Hub {
     }
   }
 
-  async private Task<T?> HandleException<T>(Func<Task<T>> action) {
+  async private Task<T?> HandleException<T>(Func<Task<T>> action, ExceptionActionType actionType = ExceptionActionType.OTHER) {
     try {
       var result = await action();
       return result;
@@ -97,7 +98,7 @@ public class MessagesHub : Hub {
       Console.ForegroundColor = ConsoleColor.DarkRed;
       Console.Error.WriteLine(e);
       Console.ForegroundColor = ConsoleColor.White;
-      await SendErrorMessage(ExceptionActionType.OTHER, e);
+      await SendErrorMessage(actionType, e);
       return default(T);
     }
   }
@@ -194,8 +195,8 @@ public class MessagesHub : Hub {
     });
   }
 
-  async public Task SendMessage(string chatId, string text, string? replyToId) {
-    await HandleException(async () => {
+  async public Task<bool> SendMessage(string chatId, string text, string? replyToId) {
+    return await HandleException<bool>(async () => {
       var fromId = this.Context.UserIdentifier;
       ArgumentNullException.ThrowIfNullOrEmpty(fromId);
       var message = await _messagesDB.CreateMessage(fromId, chatId, text, replyToId);
@@ -203,7 +204,7 @@ public class MessagesHub : Hub {
       await Clients.Caller.SendAsync("newMessage", message, default);
       message.IsFromCaller = false;
       await Clients.GroupExcept(chatId, this.Context.ConnectionId).SendAsync("newMessage", message, default);
-
+      return true;
     },
       actionType: ExceptionActionType.MESSAGE
     );
@@ -504,15 +505,15 @@ public class MessagesHub : Hub {
   }
 
   async public Task CloseConnection(List<string> ids) {
-    await HandleException(async() => {
+    await HandleException(async () => {
       var userId = EnsureUserIdNotNull(this.Context.UserIdentifier);
       var user = await _userManager.FindByIdAsync(userId);
       ArgumentNullException.ThrowIfNull(user);
       var relevantConnections = await _messagesDB.DeleteConnections(ids);
       ArgumentNullException.ThrowIfNull(relevantConnections);
       foreach (var relevantConnection in relevantConnections) {
-      if (relevantConnection.Active)
-        await Clients.Client(relevantConnection.ConnectionId).SendAsync("forceLogOut");
+        if (relevantConnection.Active)
+          await Clients.Client(relevantConnection.ConnectionId).SendAsync("forceLogOut");
       }
       await _userManager.UpdateSecurityStampAsync(user);
     });

@@ -441,8 +441,13 @@ public class MessagesDB {
   // Delete
   async public Task<bool> DeleteMessage(string messageId, string chatId, string userId) {
     using var ctx = new ChattyBoxContext();
+    var currentUser = await ctx.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(currentUser);
     var chat = await ctx.Chats.Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
+    if (message.FlaggedByAdmin && !currentUser.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER")) {
+      return false;
+    }
     if (userId != message.FromId && !chat.Admins.Any(a => a.Id == userId)) {
       return false;
     }
