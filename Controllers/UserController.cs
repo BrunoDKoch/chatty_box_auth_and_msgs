@@ -147,6 +147,12 @@ public class UserController : ControllerBase {
       .SendAsync("newAvatar", new { userId, avatar }, default);
   }
 
+  private void CheckFileSize(IFormFile file) {
+    if (file.Length.Bytes() > (20).Megabytes()) {
+      throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
+    }
+  }
+
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
@@ -375,6 +381,7 @@ public class UserController : ControllerBase {
   // Images
   [HttpPost("Avatar")]
   async public Task<ActionResult<string>> SaveAvatar([FromForm] IFormFile file) {
+    CheckFileSize(file);
     var user =
       await _userManager.Users
         .Include(u => u.Chats)
@@ -405,11 +412,9 @@ public class UserController : ControllerBase {
 
   [HttpPost("Upload/{chatId}")]
   async public Task<ActionResult<ChatMessage>> UploadImage(string chatId, [FromForm] IFormFile file) {
+    CheckFileSize(file);
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
-    if (file.Length.Megabytes() > (20).Megabytes()) {
-      throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
-    }
     string[] validFileTypes = { "image", "video", "audio" };
     if (!validFileTypes.Contains(file.ContentType.Split("/").First()))
       throw new InvalidOperationException("invalid file type");
