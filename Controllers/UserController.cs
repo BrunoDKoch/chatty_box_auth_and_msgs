@@ -415,15 +415,14 @@ public class UserController : ControllerBase {
     CheckFileSize(file);
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
-    string[] validFileTypes = { "image", "video", "audio" };
-    if (!validFileTypes.Contains(file.ContentType.Split("/").First()))
-      throw new InvalidOperationException("invalid file type");
     var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, _maxMindClient);
     string filePath;
     if (file.ContentType.StartsWith("image")) {
       filePath = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
-    } else {
+    } else if (file.ContentType.StartsWith("video") || file.ContentType.StartsWith("image")) {
       filePath = await AudioAndVideoService.SaveFile(file, chatId, user.Id);
+    } else {
+      filePath = await FileService.SaveFile(file, chatId, user.Id);
     }
     var message = await messagesDB.CreateMessage(user.Id, chatId, filePath);
     await _hubContext.Clients.Group(chatId).SendAsync("newMessage", message, default);
