@@ -32,7 +32,7 @@ public partial class Message {
   public string Text { get; set; } = null!;
 
   [Column("flaggedByAdmin")]
-  public bool FlaggedByAdmin { get; set; } = false;
+  public bool? FlaggedByAdmin { get; set; } = false;
 
   [Column("replyToId")]
   [StringLength(1000)]

@@ -185,33 +185,33 @@ public class UserDB {
     return response;
   }
 
-  async public Task<UserConnectionCallInfo> GetUserPersonalInfo(HttpContext httpContext) {
+  async public Task<UserPersonalInfo> GetUserPersonalInfo(HttpContext httpContext) {
     var userClaim = httpContext.User;
     ArgumentNullException.ThrowIfNull(userClaim);
     var userId = userClaim.FindFirstValue(ClaimTypes.NameIdentifier);
     ArgumentNullException.ThrowIfNullOrEmpty(userId);
     var user = await _userManager.Users
       .Include(u => u.Friends)
-        .ThenInclude(f => f.Friends)
-      .Include(u => u.Friends)
-        .ThenInclude(f => f.IsFriendsWith)
+        .ThenInclude(f => f.ClientConnections)
       .Include(u => u.IsFriendsWith)
-        .ThenInclude(f => f.Friends)
-      .Include(u => u.IsFriendsWith)
-        .ThenInclude(f => f.IsFriendsWith)
-      .Include(u => u.FriendRequestsSent)
-        .ThenInclude(f => f.UserBeingAdded)
+        .ThenInclude(f => f.ClientConnections)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Messages)
+          .ThenInclude(m => m.From)
+      .Include(c => c.Chats)
+        .ThenInclude(c => c.SystemMessages)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Messages)
+          .ThenInclude(m => m.ReadBy)
+      .Include(u => u.Chats)
+        .ThenInclude(c => c.Users.Where(u => u.Id != userId))
+      .Include(u => u.Blocking)
       .Include(u => u.FriendRequestsReceived)
         .ThenInclude(f => f.UserAdding)
-      .Include(u => u.Blocking)
       .Include(u => u.Roles)
-      .Include(u => u.Blocking)
-      .Include(u => u.BlockedBy)
-      .Include(u => u.Chats)
-        .ThenInclude(c => c.Users)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
-    return new UserConnectionCallInfo(user);
+    return new UserPersonalInfo(user);
   }
 
   // Update

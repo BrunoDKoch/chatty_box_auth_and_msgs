@@ -26,7 +26,7 @@ public partial class AdminAction {
   public DateTime EnactedOn { get; set; }
 
   [Column("revoked")]
-  public bool Revoked { get; set; }
+  public bool? Revoked { get; set; }
 
   [ForeignKey("AdminId")]
   [InverseProperty("AdminActions")]

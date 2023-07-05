@@ -63,7 +63,7 @@ public partial class ClientConnection {
 
   [Required]
   [Column("active")]
-  public bool Active { get; set; } = true;
+  public bool? Active { get; set; } = true;
 
   [Column("createdAt")]
   public DateTime CreatedAt { get; set; }

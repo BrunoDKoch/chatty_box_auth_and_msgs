@@ -27,7 +27,7 @@ public partial class User : IdentityUser {
   public string? Status { get; set; }
 
   [Column("showStatus")]
-  public bool ShowStatus { get; set; } = true;
+  public bool? ShowStatus { get; set; } = true;
 
   [Column("lockoutReason")]
   public string? LockoutReason { get; set; }

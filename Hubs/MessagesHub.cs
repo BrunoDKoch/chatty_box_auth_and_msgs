@@ -118,7 +118,15 @@ public class MessagesHub : Hub {
         var httpContext = this.Context.GetHttpContext();
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, this.Context.ConnectionId, httpContext);
-        var user = await _userDB.GetPreliminaryConnectionCallInfo(id);
+        var user = await _userManager.Users
+          .Include(u => u.Roles)
+          .Include(u => u.Chats)
+          .Include(u => u.Friends)
+            .ThenInclude(f => f.ClientConnections)
+          .Include(u => u.IsFriendsWith)
+            .ThenInclude(f => f.ClientConnections)
+          .FirstOrDefaultAsync(u => u.Id == id);
+        ArgumentNullException.ThrowIfNull(user);
 
         // Add to admin group
         if (user.Roles.Any() && user.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER"))
@@ -140,7 +148,7 @@ public class MessagesHub : Hub {
         // Inform friends of connection
         await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status = user.Status, online = true }, default);
 
-        await Clients.Caller.SendAsync("connectionInfo", new UserConnectionCallInfo(user), default);
+        await Clients.Caller.SendAsync("connectionSuccessful", default);
       },
       async () => await base.OnConnectedAsync()
     );
@@ -316,7 +324,7 @@ public class MessagesHub : Hub {
       var user = await _userManager
         .Users
         .Include(u => u.ClientConnections
-          .Where(c => c.Active)
+          .Where(c => (bool)c.Active!)
         )
         .FirstOrDefaultAsync(u => u.Id == addingId);
       ArgumentNullException.ThrowIfNull(user);
@@ -512,7 +520,7 @@ public class MessagesHub : Hub {
       var relevantConnections = await _messagesDB.DeleteConnections(ids);
       ArgumentNullException.ThrowIfNull(relevantConnections);
       foreach (var relevantConnection in relevantConnections) {
-        if (relevantConnection.Active)
+        if ((bool)relevantConnection.Active!)
           await Clients.Client(relevantConnection.ConnectionId).SendAsync("forceLogOut");
       }
       await _userManager.UpdateSecurityStampAsync(user);

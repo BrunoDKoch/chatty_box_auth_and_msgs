@@ -61,7 +61,7 @@ public class ChatMessage {
     Id = message.Id;
     ChatId = message.ChatId;
     // Omit text if flagged
-    Text = message.FlaggedByAdmin && !adminRequest ? "messageFlagged" : message.Text;
+    Text = (bool)message.FlaggedByAdmin! && !adminRequest ? "messageFlagged" : message.Text;
     ReplyToId = message.ReplyToId;
     SentAt = message.SentAt;
     EditedAt = message.EditedAt;
@@ -209,7 +209,7 @@ public class UserPartialResponse {
     Avatar = user.Avatar;
     IsBlocking = user.Blocking.Any(u => u.Id == requestingUserId);
     IsBlocked = user.BlockedBy.Any(u => u.Id == requestingUserId);
-    Status = user.Status;
+    Status = user.Status ?? String.Empty;
   }
   public UserPartialResponse(User user) {
     Id = user.Id;
@@ -217,7 +217,7 @@ public class UserPartialResponse {
     Avatar = user.Avatar;
     IsBlocked = false;
     IsBlocking = false;
-    Status = user.Status;
+    Status = user.Status ?? String.Empty;
   }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
@@ -284,7 +284,7 @@ public class FriendResponse : UserPartialResponse {
     IsOnline = isOnline;
   }
   public FriendResponse(User user, string requestingUserId) : base(user, requestingUserId) {
-    IsOnline = user.ClientConnections.Any(c => c.Active);
+    IsOnline = user.ClientConnections.Any(c => (bool)c.Active!);
   }
   public bool IsOnline { get; set; }
 }
@@ -400,7 +400,7 @@ public class ClientConnectionPartialInfo {
     GeoNameId = connection.GeoNameId;
     IpAddress = connection.IpAddress;
     Os = connection.Os.Humanize();
-    Active = connection.Active;
+    Active = (bool)connection.Active!;
     CreatedAt = connection.CreatedAt;
     IsCurrentSession = connection.ConnectionId == currentConnectionId;
   }
@@ -464,7 +464,7 @@ public class AdminActionPartial {
     Admin = new UserPartialResponse(action.Admin);
     Action = action.Action;
     EnactedOn = action.EnactedOn;
-    Revoked = action.Revoked;
+    Revoked = (bool)action.Revoked!;
   }
 }
 

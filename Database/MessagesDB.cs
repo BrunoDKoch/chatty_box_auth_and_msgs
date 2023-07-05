@@ -219,7 +219,7 @@ public class MessagesDB {
     var chat = await ctx.Chats.Include(c => c.Users).FirstAsync(c => c.Id == chatId);
     var connections = await ctx.ClientConnections
       .Include(c => c.User)
-      .Where(c => c.Active && chat.Users.Contains(c.User))
+      .Where(c => (bool)c.Active! && chat.Users.Contains(c.User))
       .ToListAsync();
     return connections;
   }
@@ -445,7 +445,7 @@ public class MessagesDB {
     ArgumentNullException.ThrowIfNull(currentUser);
     var chat = await ctx.Chats.Include(c => c.Admins).FirstAsync(c => c.Id == chatId);
     var message = await ctx.Messages.FirstAsync(m => m.Id == messageId);
-    if (message.FlaggedByAdmin && !currentUser.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER")) {
+    if ((bool)message.FlaggedByAdmin! && !currentUser.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER")) {
       return false;
     }
     if (userId != message.FromId && !chat.Admins.Any(a => a.Id == userId)) {
