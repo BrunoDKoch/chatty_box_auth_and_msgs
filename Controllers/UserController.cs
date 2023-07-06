@@ -153,14 +153,23 @@ public class UserController : ControllerBase {
     }
   }
 
+  private Claim CreateOTPClaim() {
+    var otp = new Random().Next(100000, 999999).ToString();
+    var otpClaim = new Claim("OTP", otp);
+    return otpClaim;
+  }
+
+  async private Task RemoveOTPClaimFromUser(User user) {
+    var claims = await _userManager.GetClaimsAsync(user);
+    var claim = claims.FirstOrDefault(c => c.Type == "OTP");
+    ArgumentNullException.ThrowIfNull(claim);
+    await _userManager.RemoveClaimAsync(user, claim);
+  }
+
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
-  async public Task<ActionResult<string>> RegisterUser([FromBody] UserInitialData data) {
-    // TODO: Add email confirmation logic
-    // For now, we'll just send the email confirmation code to the client
-    var otp = new Random().Next(100000, 999999).ToString();
-    await _emailService.SendEmail(data.Email, EmailType.EmailConfirmation, otp);
+  async public Task<ActionResult<string?>> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
     var result = await _userManager.CreateAsync(createdUser);
     if (result.Errors.Count() > 0) {
@@ -169,11 +178,11 @@ public class UserController : ControllerBase {
         return Unauthorized(string.Join("\n", result.Errors.Select(e => e.Description)));
       return Conflict(string.Join("\n", result.Errors.Select(e => e.Description)));
     }
-    var otpClaim = new Claim("OTP", otp);
+    var otpClaim = CreateOTPClaim();
     await _userManager.AddClaimAsync(createdUser, otpClaim);
+    await _emailService.SendEmail(data.Email, EmailType.EmailConfirmation, otpClaim.Value);
 
-
-    return Ok(otp);
+    return Ok();
   }
 
   [AllowAnonymous]
@@ -185,6 +194,15 @@ public class UserController : ControllerBase {
       ArgumentNullException.ThrowIfNull(user);
     } catch {
       return Unauthorized(_localizer.GetString("401Auth").Value);
+    }
+
+    // If email is not confirmed, re-send confirmation
+    if (!(await _userManager.IsEmailConfirmedAsync(user))) {
+      await RemoveOTPClaimFromUser(user);
+      var otpClaim = CreateOTPClaim();
+      await _userManager.AddClaimAsync(user, otpClaim);
+      await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: otpClaim.Value!);
+      return BadRequest("emailNotConfirmed");
     }
 
     var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);

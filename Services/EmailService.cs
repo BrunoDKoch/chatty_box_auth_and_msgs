@@ -127,6 +127,7 @@ public class EmailService {
   async public Task SendEmail(string emailAddress, EmailType emailType, string otpCode = "", string itemAndToken = "") {
     var emailData = GetEmailData();
     using var client = new SmtpClient();
+    client.EnableSsl = true;
     client.Host = emailData.Host;
     client.Port = emailData.Port;
     client.Credentials = emailData.Credential;
@@ -137,6 +138,6 @@ public class EmailService {
     message.Subject = GetTitle(emailType);
     message.Body = String.IsNullOrEmpty(itemAndToken) ? await GetEmailBody(emailType, otpCode) : await GetEmailBody(emailType, itemAndToken: itemAndToken);
     message.IsBodyHtml = true;
-    await Task.Run(() => client.SendAsync(message, emailAddress));
+    await client.SendMailAsync(message);
   }
 }
