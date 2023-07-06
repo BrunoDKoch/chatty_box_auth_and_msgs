@@ -139,7 +139,7 @@ public class CompleteChatResponse {
     UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
     Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
     Messages = messages;
-    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
+    SystemMessages = chat.SystemMessages.Any() ? chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList() : new List<SystemMessagePartial>();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = messageCount;
   }
