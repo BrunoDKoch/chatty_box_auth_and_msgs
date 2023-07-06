@@ -273,7 +273,7 @@ public class UserPersonalInfo : UserPartialResponse {
   public UserPersonalInfo(User user) : base(user) {
     FriendRequests = user.FriendRequestsReceived.Select(f => new FriendRequestFiltered { UserAdding = new UserPartialResponse(f.UserAdding) }).ToList();
     Friends = user.Friends.Select(f => new FriendResponse(f, Id)).Concat(user.IsFriendsWith.Select(f => new FriendResponse(f, Id))).ToList();
-    Previews = user.Chats.Select(c => new ChatPreview(c, Id)).ToList();
+    Previews = user.Chats.Select(c => new ChatPreview(c, Id)).OrderByDescending(c => c.LastMessage == null ? c.CreatedAt : c.LastMessage.SentAt).ToList();
     Blocks = user.Blocking.Select(b => new UserPartialResponse(b)).ToList();
     IsAdmin = user.Roles.Any(r => r.NormalizedName == "OWNER" || r.NormalizedName == "ADMIN");
   }
