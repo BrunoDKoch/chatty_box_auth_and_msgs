@@ -1,5 +1,6 @@
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Formats;
 using ChattyBox.Models;
 
 namespace ChattyBox.Services;
@@ -40,6 +41,21 @@ static public class ImageService {
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
+    return filePath;
+  }
+
+  static public async Task<string> SaveImage(Uri uri, User user, bool isAvatar = false) {
+    var name = isAvatar ? "avatar" : Guid.NewGuid().ToString();
+    var fileName = $"{name}.png";
+    var imagesPath = Path.Combine("static", "images");
+    var savePath = Path.Combine(imagesPath, user.Id, "avatar");
+    if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
+    var filePath = Path.Combine(savePath, fileName);
+    using var client = new HttpClient();
+    var response = await client.GetAsync(uri);
+    
+    using var image = await Image.LoadAsync(await response.Content.ReadAsStreamAsync());
+    await image.SaveAsPngAsync(filePath);
     return filePath;
   }
 

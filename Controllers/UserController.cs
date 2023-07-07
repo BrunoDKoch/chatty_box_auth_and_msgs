@@ -171,6 +171,7 @@ public class UserController : ControllerBase {
   [HttpPost("Register")]
   async public Task<ActionResult<string?>> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
+    createdUser.Avatar = await createdUser.GetDefaultAvatar();
     var result = await _userManager.CreateAsync(createdUser);
     if (result.Errors.Count() > 0) {
       var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
@@ -189,7 +190,8 @@ public class UserController : ControllerBase {
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
 
-    var user = await _userManager.Users.Include(u => u.ReportsAgainstUser).FirstOrDefaultAsync(u => u.Email == data.Email);
+    var user = await _userManager.Users.Include(u => u.ReportsAgainstUser).FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
+    Console.WriteLine($"user is null: {user is null}");
     try {
       ArgumentNullException.ThrowIfNull(user);
     } catch {
