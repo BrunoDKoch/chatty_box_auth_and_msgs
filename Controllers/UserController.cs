@@ -166,12 +166,18 @@ public class UserController : ControllerBase {
     await _userManager.RemoveClaimAsync(user, claim);
   }
 
+  async public Task<string> GetDefaultAvatar(User user) {
+    var uri = new Uri($"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random");
+    var filePath = await ImageService.SaveImage(uri, user, isAvatar: true);
+    return filePath;
+  }
+
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
   async public Task<ActionResult<string?>> RegisterUser([FromBody] UserInitialData data) {
     var createdUser = new UserCreate(data);
-    createdUser.Avatar = await createdUser.GetDefaultAvatar();
+    createdUser.Avatar = await GetDefaultAvatar(createdUser);
     var result = await _userManager.CreateAsync(createdUser);
     if (result.Errors.Count() > 0) {
       var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
@@ -422,7 +428,8 @@ public class UserController : ControllerBase {
     ArgumentNullException.ThrowIfNull(user);
     ArgumentNullException.ThrowIfNullOrEmpty(user.Avatar);
     ImageService.DeleteImage(user.Avatar);
-    user.Avatar = String.Empty;
+
+    user.Avatar = await GetDefaultAvatar(user);
     await _userManager.UpdateAsync(user);
 
     var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });

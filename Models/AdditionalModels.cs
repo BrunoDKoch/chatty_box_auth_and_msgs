@@ -13,11 +13,6 @@ public class UserInitialData {
 
 public class UserCreate : User {
   private PasswordHasher<User> passwordHasher = new PasswordHasher<User>();
-  async public Task<string> GetDefaultAvatar() {
-    var uri = new Uri($"https://ui-avatars.com/api/?name={this.UserName}&background=random&size=150&bold=true&format=png&color=random");
-    var filePath = await ImageService.SaveImage(uri, this, isAvatar: true);
-    return filePath;
-  }
   public UserCreate(UserInitialData data) {
     Email = data.Email;
     UserName = data.UserName;
