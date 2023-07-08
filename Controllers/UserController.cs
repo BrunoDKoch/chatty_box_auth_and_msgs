@@ -141,6 +141,48 @@ public class UserController : ControllerBase {
     return loginAttempt;
   }
 
+  async private Task<LoginAttemptResult> HandleLoginAttempt(User user, LogInInfo data) {
+    var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
+    var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
+    loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
+    ArgumentNullException.ThrowIfNull(loginAttempt);
+
+    using var ctx = new ChattyBoxContext();
+    await ctx.UserLoginAttempts.AddAsync(loginAttempt);
+    await ctx.SaveChangesAsync();
+
+    string failureReason = $"Invalid credentials.\n{_localizer.GetString("401Auth").Value}";
+    // Tell the user if their account is locked out
+    if (await _userManager.IsLockedOutAsync(user)) {
+      string failureReasonStart;
+      if (user.LockoutEnd == DateTimeOffset.MaxValue) {
+        failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
+      } else {
+        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value} " +
+          $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
+      }
+      string failureReasonEnd = $"{_localizer.GetString("Reasons")}: " +
+        string.Join(',', (
+          user.ReportsAgainstUser.Select(r => _localizer.GetString(r.ReportReason.Replace("report.", "").Pascalize()))
+          )
+        );
+
+      failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
+    };
+    return new LoginAttemptResult { LoginAttempt = loginAttempt, FailureReason = failureReason, SuspiciousLocation = suspiciousLocation };
+  }
+
+  async private Task<bool> CheckIfEmailIsVerified(User user) {
+    var isVerified = await _userManager.IsEmailConfirmedAsync(user);
+    if (!isVerified) {
+      await RemoveOTPClaimFromUser(user);
+      var otpClaim = CreateOTPClaim();
+      await _userManager.AddClaimAsync(user, otpClaim);
+      await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: otpClaim.Value!);
+    }
+    return isVerified;
+  }
+
   async private Task SendAvatarUpdateMessage(string userId, string avatar, IEnumerable<string> usersToNotify) {
     await _hubContext.Clients
       .Groups(usersToNotify)
@@ -179,7 +221,7 @@ public class UserController : ControllerBase {
     var createdUser = new UserCreate(data);
     createdUser.Avatar = await GetDefaultAvatar(createdUser);
     var result = await _userManager.CreateAsync(createdUser);
-    if (result.Errors.Count() > 0) {
+    if (result.Errors.Any()) {
       var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
       if (duplicateErrors is null || duplicateErrors.Count == 0)
         return Unauthorized(string.Join("\n", result.Errors.Select(e => e.Description)));
@@ -195,54 +237,29 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
-
-    var user = await _userManager.Users.Include(u => u.ReportsAgainstUser).FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
-    Console.WriteLine($"user is null: {user is null}");
+    var user = 
+      await _userManager.Users
+        .Include(u => u.ReportsAgainstUser)
+        .FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
     try {
       ArgumentNullException.ThrowIfNull(user);
     } catch {
       return Unauthorized(_localizer.GetString("401Auth").Value);
     }
 
-    // If email is not confirmed, re-send confirmation
-    if (!(await _userManager.IsEmailConfirmedAsync(user))) {
-      await RemoveOTPClaimFromUser(user);
-      var otpClaim = CreateOTPClaim();
-      await _userManager.AddClaimAsync(user, otpClaim);
-      await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: otpClaim.Value!);
+    // If email is not confirmed, re-send confirmation and prevent login
+    if (!(await CheckIfEmailIsVerified(user))) {
       return BadRequest("emailNotConfirmed");
     }
 
-    var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
-
-    var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
-    string failureReason = $"Invalid credentials.\n{_localizer.GetString("401Auth").Value}";
-
-    loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
-    if (loginAttempt is null) return BadRequest();
-    using var ctx = new ChattyBoxContext();
-    await ctx.UserLoginAttempts.AddAsync(loginAttempt);
-    await ctx.SaveChangesAsync();
-    // Tell the user if their account is locked out
-    if (await _userManager.IsLockedOutAsync(user)) {
-      string failureReasonStart;
-      if (user.LockoutEnd == DateTimeOffset.MaxValue) {
-        failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
-      } else {
-        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value} " +
-          $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
-      }
-      string failureReasonEnd = $"{_localizer.GetString("Reasons")}: " +
-        string.Join(',', (
-          user.ReportsAgainstUser.Select(r => _localizer.GetString(r.ReportReason.Replace("report.", "").Pascalize()))
-          )
-        );
-
-      failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
-    };
-    if (!loginAttempt.Success) {
+    var loginAttemptResult = await HandleLoginAttempt(user, data);
+    if (!loginAttemptResult.LoginAttempt.Success) {
       await _userManager.AccessFailedAsync(user);
-      return suspiciousLocation ? StatusCode(StatusCodes.Status403Forbidden, failureReason) : Unauthorized(failureReason);
+
+      // Send 403 in case the login attempt comes from a suspicious location
+      return loginAttemptResult.SuspiciousLocation ?
+        StatusCode(StatusCodes.Status403Forbidden, loginAttemptResult.FailureReason) :
+        Unauthorized(loginAttemptResult.FailureReason);
     };
     await _userManager.ResetAccessFailedCountAsync(user);
     return StatusCode(StatusCodes.Status302Found);
