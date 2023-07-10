@@ -515,3 +515,7 @@ public class LoginAttemptResult {
   public string FailureReason { get; set; } = null!;
   public bool SuspiciousLocation;
 }
+
+public class FileDeletionRequest {
+  public string FilePath { get; set; } = null!;
+}

@@ -26,6 +26,7 @@
     <PackageReference Include="Sentry.AspNetCore" Version="3.33.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
     <PackageReference Include="SixLabors.ImageSharp.Web" Version="3.0.1" />
+    <PackageReference Include="SixLabors.ImageSharp.Web.Providers.AWS" Version="3.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
     <PackageReference Include="UAParser" Version="3.1.47" />
   </ItemGroup>

@@ -208,9 +208,9 @@ public class UserController : ControllerBase {
     await _userManager.RemoveClaimAsync(user, claim);
   }
 
-  async public Task<string> GetDefaultAvatar(User user) {
+  async private Task<string> GetDefaultAvatar(User user) {
     var uri = new Uri($"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random");
-    var filePath = await ImageService.SaveImage(uri, user, isAvatar: true);
+    var filePath = await FileService.SaveImage(uri, user, isAvatar: true);
     return filePath;
   }
 
@@ -237,7 +237,7 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
-    var user = 
+    var user =
       await _userManager.Users
         .Include(u => u.ReportsAgainstUser)
         .FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
@@ -430,7 +430,7 @@ public class UserController : ControllerBase {
         .Include(u => u.Chats)
         .FirstOrDefaultAsync(u => u.Id == HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
     ArgumentNullException.ThrowIfNull(user);
-    var avatar = await ImageService.SaveImage(file, user, _webHostEnvironment, isAvatar: true);
+    var avatar = await FileService.SaveImage(file, user, _webHostEnvironment, isAvatar: true);
     user.Avatar = avatar;
     await _userManager.UpdateAsync(user);
 
@@ -444,7 +444,7 @@ public class UserController : ControllerBase {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
     ArgumentNullException.ThrowIfNullOrEmpty(user.Avatar);
-    ImageService.DeleteImage(user.Avatar);
+    FileService.DeleteFile(user.Avatar);
 
     user.Avatar = await GetDefaultAvatar(user);
     await _userManager.UpdateAsync(user);
@@ -462,14 +462,24 @@ public class UserController : ControllerBase {
     var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, _maxMindClient);
     string filePath;
     if (file.ContentType.StartsWith("image")) {
-      filePath = await ImageService.SaveImage(file, user, _webHostEnvironment, chatId);
-    } else if (file.ContentType.StartsWith("video") || file.ContentType.StartsWith("image")) {
-      filePath = await AudioAndVideoService.SaveFile(file, chatId, user.Id);
+      filePath = await FileService.SaveImage(file, user, _webHostEnvironment, chatId);
+    } else if (file.ContentType.StartsWith("video") || file.ContentType.StartsWith("audio")) {
+      filePath = await FileService.SaveFile(file, chatId, user.Id, file.ContentType.StartsWith("image") ? FileType.Audio : FileType.Video);
     } else {
-      filePath = await FileService.SaveFile(file, chatId, user.Id);
+      filePath = await FileService.SaveFile(file, chatId, user.Id, FileType.Other);
     }
-    var message = await messagesDB.CreateMessage(user.Id, chatId, filePath);
-    await _hubContext.Clients.Group(chatId).SendAsync("newMessage", message, default);
-    return Ok(message);
+    await _hubContext.Clients.User(user.Id).SendAsync("fileAdded", new { chatId, filePath });
+    return Ok(filePath);
+  }
+
+  [HttpDelete("Upload/{chatId}")]
+  async public Task<ActionResult<ChatMessage>> RemoveImage(string chatId, [FromBody] FileDeletionRequest fileDeletionRequest) {
+    var user = await _userManager.GetUserAsync(HttpContext.User);
+    ArgumentNullException.ThrowIfNull(user);
+    if (!fileDeletionRequest.FilePath.Contains(chatId) || !fileDeletionRequest.FilePath.Contains(user.Id))
+      throw new InvalidOperationException(_localizer.GetString("403"));
+    FileService.DeleteFile(fileDeletionRequest.FilePath);
+    await _hubContext.Clients.User(user.Id).SendAsync("fileRemoved", new { chatId, fileDeletionRequest.FilePath });
+    return Ok(fileDeletionRequest.FilePath);
   }
 }

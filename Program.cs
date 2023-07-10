@@ -10,6 +10,7 @@ using ChattyBox.Misc;
 using MaxMind.GeoIP2;
 using SixLabors.ImageSharp.Web.DependencyInjection;
 using SixLabors.ImageSharp.Web.Providers;
+using SixLabors.ImageSharp.Web.Providers.AWS;
 using SixLabors.ImageSharp.Web.Caching;
 using Microsoft.IdentityModel.Logging;
 using System.Net.Mime;
@@ -92,16 +93,37 @@ var provider = builder.Environment.ContentRootFileProvider;
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
 
-builder.Services.AddImageSharp()
-  .Configure<PhysicalFileSystemProviderOptions>(options => {
-    options.ProviderRootPath = ".";
-    options.ProcessingBehavior = ProcessingBehavior.All;
-  })
-  .Configure<PhysicalFileSystemCacheOptions>(options => {
-    options.CacheRootPath = "./";
-    options.CacheFolder = "cache";
-  })
-  .AddProvider<PhysicalFileSystemProvider>();
+if (builder.Environment.IsDevelopment()) {
+  builder.Services.AddImageSharp()
+    .Configure<PhysicalFileSystemProviderOptions>(options => {
+      options.ProviderRootPath = ".";
+      options.ProcessingBehavior = ProcessingBehavior.All;
+    })
+    .Configure<PhysicalFileSystemCacheOptions>(options => {
+      options.CacheRootPath = "./";
+      options.CacheFolder = "cache";
+    })
+    .AddProvider<PhysicalFileSystemProvider>();
+} else {
+  var AWSConfig = builder.Configuration.GetSection("AWS");
+  var Endpoint = AWSConfig.GetValue<string>("Endpoint")!;
+  var BucketName = AWSConfig.GetValue<string>("BucketName")!;
+  var AccessKey = AWSConfig.GetValue<string>("AccessKey")!;
+  var AccessSecret = AWSConfig.GetValue<string>("AccessSecret")!;
+  var Region = AWSConfig.GetValue<string>("Region")!;
+  builder.Services.AddImageSharp()
+    .Configure<AWSS3StorageImageProviderOptions>(options => {
+      options.S3Buckets.Add(new AWSS3BucketClientOptions {
+        Endpoint = Endpoint,
+        BucketName = BucketName,
+        AccessKey = AccessKey,
+        AccessSecret = AccessSecret,
+        Region = Region
+      });
+    })
+    .AddProvider<AWSS3StorageImageProvider>();
+}
+
 builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
 builder.Services.AddHttpClient<WebServiceClient>();
 
@@ -158,6 +180,13 @@ app.UseExceptionHandler(exceptionHandler => {
         if (ex.Error.GetType().ToString() == "ArgumentNullException") {
           context.Response.StatusCode = StatusCodes.Status401Unauthorized;
           await context.Response.WriteAsync("Invalid credentials");
+          return;
+        }
+        if (
+          context.Request.Path.Value.ToLower().Contains("upload") && 
+          ex.Error.GetType().ToString() == "InvalidOperationException"
+        ) {
+          context.Response.StatusCode = StatusCodes.Status403Forbidden;
           return;
         }
       }
