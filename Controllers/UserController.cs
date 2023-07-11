@@ -241,15 +241,11 @@ public class UserController : ControllerBase {
       await _userManager.Users
         .Include(u => u.ReportsAgainstUser)
         .FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
-    try {
-      ArgumentNullException.ThrowIfNull(user);
-    } catch {
-      return Unauthorized(_localizer.GetString("401Auth").Value);
-    }
+    ArgumentNullException.ThrowIfNull(user);
 
     // If email is not confirmed, re-send confirmation and prevent login
     if (!(await CheckIfEmailIsVerified(user))) {
-      return BadRequest("emailNotConfirmed");
+      throw new EmailConfirmationException();
     }
 
     var loginAttemptResult = await HandleLoginAttempt(user, data);
@@ -257,9 +253,8 @@ public class UserController : ControllerBase {
       await _userManager.AccessFailedAsync(user);
 
       // Send 403 in case the login attempt comes from a suspicious location
-      return loginAttemptResult.SuspiciousLocation ?
-        StatusCode(StatusCodes.Status403Forbidden, loginAttemptResult.FailureReason) :
-        Unauthorized(loginAttemptResult.FailureReason);
+      if (loginAttemptResult.SuspiciousLocation) throw new SuspiciousLocationException(_localizer.GetString("403"));
+      throw new InvalidCredentialsException(loginAttemptResult.FailureReason);
     };
     await _userManager.ResetAccessFailedCountAsync(user);
     return StatusCode(StatusCodes.Status302Found);
