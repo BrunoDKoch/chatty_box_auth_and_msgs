@@ -12,7 +12,7 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   }
 
   public ChattyBoxContext(DbContextOptions<ChattyBoxContext> options)
-      : base(options) {
+    : base(options) {
   }
 
   public virtual DbSet<AdminAction> AdminActions { get; set; } = null!;
@@ -54,10 +54,11 @@ public partial class ChattyBoxContext : IdentityDbContext<User, Role, string, Us
   public override DbSet<UserToken> UserTokens { get; set; } = null!;
 
   protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
+    var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
     if (!optionsBuilder.IsConfigured) {
       var configuration = new ConfigurationBuilder()
         .SetBasePath(Directory.GetCurrentDirectory())
-        .AddJsonFile("appsettings.Development.json")
+        .AddJsonFile(environmentName == "Development" ? "appsettings.Development.json" : "appsettings.json")
         .Build();
       var connString = configuration.GetConnectionString("Default");
       optionsBuilder.UseSqlServer(connString);

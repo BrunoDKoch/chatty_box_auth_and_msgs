@@ -20,12 +20,19 @@ using ChattyBox.Localization;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.FileProviders;
 using ChattyBox.Services;
+using ChattyBox.Middleware;
 
 var reqOrigin = "_reqOrigin";
 
 var allowedLetters = ValidCharacters.GetLetters();
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (builder.Environment.IsDevelopment()) {
+  builder.Configuration.AddJsonFile("appsettings.Development.json");
+} else {
+  builder.Configuration.AddJsonFile("appsettings.json");
+}
 
 // Add services to the container.
 builder.Services.AddCors(options => {
@@ -167,43 +174,7 @@ app.UseRequestLocalization(localizationOptions);
 
 app.UseMiddleware<LocalizationMiddleware>();
 
-app.UseExceptionHandler(exceptionHandler => {
-  exceptionHandler.Run(async context => {
-    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-    context.Response.ContentType = MediaTypeNames.Application.Json;
-    var ex = context.Features.Get<IExceptionHandlerPathFeature>();
-    if (ex is not null) {
-      Console.ForegroundColor = ConsoleColor.Red;
-      Console.Error.WriteLine(context.Request.Path.Value);
-      Console.ResetColor();
-      if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("/api/v1/User")) {
-        if (ex.Error.GetType().ToString() == "ArgumentNullException") {
-          context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-          await context.Response.WriteAsync("Invalid credentials");
-          return;
-        }
-        if (
-          context.Request.Path.Value.ToLower().Contains("upload") && 
-          ex.Error.GetType().ToString() == "InvalidOperationException"
-        ) {
-          context.Response.StatusCode = StatusCodes.Status403Forbidden;
-          return;
-        }
-      }
-      string message;
-      switch (ex.Error) {
-        case Microsoft.Data.SqlClient.SqlException sqlException:
-          message = $"Database error {sqlException.Number}";
-          break;
-        default:
-          message = ex.Error.Message;
-          break;
-      }
-      context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-      await context.Response.WriteAsync(message);
-    }
-  });
-});
+app.UseGlobalExceptionHandler();
 
 app.UsePathBase(new PathString("/api/v1"));
 

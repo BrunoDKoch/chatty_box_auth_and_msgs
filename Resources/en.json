@@ -13,6 +13,8 @@
   "401General": "Access to the requested resource is unauthorized. Please make sure you are logged in or provide valid credentials.",
   "401Auth": "You have entered an invalid email or password. If you have an account, please verify the credentials you have provided.",
   "DatabaseError": "Database error code",
+  "ErrorLogged": "This error has been logged with the following unique ID:",
+  "FileTooBig": "File too big! Please limit your upload size to 20MB",
   "SupportPersists": "If this issue persists, contact support.",
   "SupportMistake": "If you believe this is a mistake, contact support.",
   "PermanentSuspension": "Account permanently suspended",

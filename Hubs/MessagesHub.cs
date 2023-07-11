@@ -52,6 +52,9 @@ public class MessagesHub : Hub {
   }
 
   async private Task SendErrorMessage(ExceptionActionType actionType, Exception exception) {
+    var errorId = Guid.NewGuid().ToString();
+    exception.AddSentryTag("source", "SignalR");
+    exception.AddSentryTag("id", errorId);
     string errorToSend = actionType == ExceptionActionType.MESSAGE ? "msgError" : "error";
     string message;
     switch (exception) {
@@ -59,10 +62,10 @@ public class MessagesHub : Hub {
         message = $"{_localizer.GetString("DatabaseError").Value} {sqlException.Number}";
         break;
       default:
-        message = $"{_localizer.GetString("Error").Value.Titleize()} {exception.HResult.ToString()}";
+        message = $"{_localizer.GetString("Error").Value.Titleize()} {exception.Message}";
         break;
     }
-    message += $"\n{_localizer.GetString("OurEnd").Value}\n{_localizer.GetString("SupportPersists").Value}";
+    message += $"\n{_localizer.GetString("ErrorLogged").Value} {errorId}";
     await Clients.Caller.SendAsync(errorToSend, message, default);
   }
 
