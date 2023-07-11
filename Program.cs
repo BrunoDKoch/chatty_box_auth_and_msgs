@@ -138,6 +138,7 @@ builder.Services.AddLocalization();
 builder.Services.AddSingleton<LocalizationMiddleware>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();
+builder.Services.AddTransient<ErrorHandlerMiddleware>();
 builder.Services.AddSingleton<EmailService>();
 
 builder.Services.AddRateLimiter(options => {
