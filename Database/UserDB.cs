@@ -76,7 +76,7 @@ public class UserDB {
       .Include(u => u.IsFriendsWith)
         .ThenInclude(f => f.ClientConnections)
       .FirstAsync(u => u.Id == userId);
-    List<User> userFriends = new List<User>();
+    List<User> userFriends = new();
     userFriends = user.Friends.Concat(user.IsFriendsWith).ToList();
     return userFriends;
   }
@@ -180,7 +180,7 @@ public class UserDB {
       .Include(u => u.Roles)
       .Include(u => u.Blocking)
       .Include(u => u.BlockedBy)
-      .Include(u => u.Chats.Where(c => !String.IsNullOrEmpty(c.ChatName)))
+      .Include(u => u.Chats.Where(c => !string.IsNullOrEmpty(c.ChatName)))
         .ThenInclude(c => c.Users)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
@@ -192,7 +192,7 @@ public class UserDB {
     var userClaim = httpContext.User;
     ArgumentNullException.ThrowIfNull(userClaim);
     var userId = userClaim.FindFirstValue(ClaimTypes.NameIdentifier);
-    ArgumentNullException.ThrowIfNullOrEmpty(userId);
+    ArgumentException.ThrowIfNullOrEmpty(userId);
     var user = await _userManager.Users
       .Include(u => u.Friends)
         .ThenInclude(f => f.ClientConnections)

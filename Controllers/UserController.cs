@@ -54,10 +54,16 @@ public class UserController : ControllerBase {
     _userDb = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
   }
 
-  async private Task CreateCodeClaim(User user, string claimName) {
-    var otp = new Random().Next(100000, 999999).ToString();
-    var otpClaim = new Claim(claimName, otp);
-    await _userManager.AddClaimAsync(user, otpClaim);
+  static private string JoinThreeStrings(string string1, string string2, string string3, bool includesVersionNumber = false) {
+    var listOfStrings = new List<string> {
+      string1,
+      string2,
+    };
+    if (!string.IsNullOrEmpty(string3)) {
+      if (includesVersionNumber) listOfStrings[1] = $"{string2}.{string3}";
+      else listOfStrings.Add(string3);
+    }
+    return string.Join(' ', listOfStrings.Distinct());
   }
 
   async private Task<User> GetUser(string email) {
@@ -66,24 +72,20 @@ public class UserController : ControllerBase {
     return user;
   }
 
-  async private Task<User> GetUser(HttpContext httpContext) {
-    var user = await _userManager.GetUserAsync(httpContext.User);
+  async private Task<User> GetUser(HttpContext httpContext, bool getConnections = false) {
+    var user = getConnections ?
+      await _userManager.GetUserAsync(httpContext.User) :
+      await _userManager.Users
+        .Include(u => u.ClientConnections)
+        .FirstOrDefaultAsync(u => u.Id == httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
     ArgumentNullException.ThrowIfNull(user);
     return user;
   }
 
-  async private Task<User> GetUser(HttpContext httpContext, bool getConnections) {
-    var user = await _userManager.Users
-      .Include(u => u.ClientConnections)
-      .FirstOrDefaultAsync(u => u.Id == httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
-    ArgumentNullException.ThrowIfNull(user);
-    return user;
-  }
-
-  async private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
+  async static private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
     using var ctx = new ChattyBoxContext();
     var previousAttempts = await ctx.UserLoginAttempts.Where(l => l.UserId == userId).ToListAsync();
-    var suspiciousLocation = previousAttempts.Count() > 0 && previousAttempts
+    var suspiciousLocation = previousAttempts.Count > 0 && previousAttempts
       .Any(
         l =>
           l.Success &&
@@ -107,14 +109,14 @@ public class UserController : ControllerBase {
       UserId = userId,
       IpAddress = ipAddress.ToString(),
       CityName = city.City.Name ?? "unknown",
-      GeoNameId = city.City.GeoNameId != null ? city.City.GeoNameId.ToString()! : "unknown",
+      GeoNameId = city.City.GeoNameId is null ? "unknown" : city.City.GeoNameId.ToString()!,
       CountryName = city.Country.Name ?? "unknown",
       CountryIsoCode = city.Country.IsoCode ?? "unknown",
       Latitude = (double)city.Location.Latitude!,
       Longitude = (double)city.Location.Longitude!,
-      OS = string.Join(' ', $"{clientInfo.OS.Family} {clientInfo.OS.Major}.{clientInfo.OS.Minor}".Split(' ').Distinct()),
-      Device = string.Join(' ', $"{clientInfo.Device.Brand} {clientInfo.Device.Family} {clientInfo.Device.Model}".Split(' ').Distinct()),
-      Browser = string.Join(' ', $"{clientInfo.UA.Family} {clientInfo.UA.Major}.{clientInfo.UA.Minor}".Split(' ').Distinct())
+      OS = JoinThreeStrings(clientInfo.OS.Family, clientInfo.OS.Major, clientInfo.OS.Minor, includesVersionNumber: true),
+      Device = JoinThreeStrings(clientInfo.Device.Brand, clientInfo.Device.Family, clientInfo.Device.Model),
+      Browser = JoinThreeStrings(clientInfo.UA.Family, clientInfo.UA.Major, clientInfo.UA.Minor, includesVersionNumber: true),
     };
     return loginAttempt;
   }
@@ -132,7 +134,7 @@ public class UserController : ControllerBase {
     // Check if requires 2FA (will return false if device is remembered)
     if (signInSuccess.RequiresTwoFactor) {
       // If yes, but no code is given, return status 400
-      if (data.MFACode == null || String.IsNullOrEmpty(data.MFACode)) return null;
+      if (data.MFACode == null || string.IsNullOrEmpty(data.MFACode)) return null;
       signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
       await _userManager.ResetAccessFailedCountAsync(user);
     }
@@ -189,13 +191,13 @@ public class UserController : ControllerBase {
       .SendAsync("newAvatar", new { userId, avatar }, default);
   }
 
-  private void CheckFileSize(IFormFile file) {
+  static private void CheckFileSize(IFormFile file) {
     if (file.Length.Bytes() > (20).Megabytes()) {
       throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
     }
   }
 
-  private Claim CreateOTPClaim() {
+  static private Claim CreateOTPClaim() {
     var otp = new Random().Next(100000, 999999).ToString();
     var otpClaim = new Claim("OTP", otp);
     return otpClaim;
@@ -208,8 +210,10 @@ public class UserController : ControllerBase {
     await _userManager.RemoveClaimAsync(user, claim);
   }
 
-  async private Task<string> GetDefaultAvatar(User user) {
-    var uri = new Uri($"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random");
+  async static private Task<string> GetDefaultAvatar(User user) {
+    var uri = new Uri(
+      $"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random"
+    );
     var filePath = await FileService.SaveImage(uri, user, isAvatar: true);
     return filePath;
   }
@@ -300,7 +304,7 @@ public class UserController : ControllerBase {
     var user = await _userManager.GetUserAsync(userClaim);
     ArgumentNullException.ThrowIfNull(user);
     await _signInManager.RefreshSignInAsync(user);
-    if (!String.IsNullOrEmpty(ReturnUrl)) return Redirect(ReturnUrl);
+    if (!string.IsNullOrEmpty(ReturnUrl)) return Redirect(ReturnUrl);
     return Ok();
   }
 
@@ -425,7 +429,7 @@ public class UserController : ControllerBase {
         .Include(u => u.Chats)
         .FirstOrDefaultAsync(u => u.Id == HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
     ArgumentNullException.ThrowIfNull(user);
-    var avatar = await FileService.SaveImage(file, user, _webHostEnvironment, isAvatar: true);
+    var avatar = await FileService.SaveImage(file, user, isAvatar: true);
     user.Avatar = avatar;
     await _userManager.UpdateAsync(user);
 
@@ -438,7 +442,7 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> DeleteAvatar() {
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
-    ArgumentNullException.ThrowIfNullOrEmpty(user.Avatar);
+    ArgumentException.ThrowIfNullOrEmpty(user.Avatar);
     FileService.DeleteFile(user.Avatar);
 
     user.Avatar = await GetDefaultAvatar(user);
@@ -454,12 +458,16 @@ public class UserController : ControllerBase {
     CheckFileSize(file);
     var user = await _userManager.GetUserAsync(HttpContext.User);
     ArgumentNullException.ThrowIfNull(user);
-    var messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, _maxMindClient);
     string filePath;
     if (file.ContentType.StartsWith("image")) {
-      filePath = await FileService.SaveImage(file, user, _webHostEnvironment, chatId);
+      filePath = await FileService.SaveImage(file, user, chatId);
     } else if (file.ContentType.StartsWith("video") || file.ContentType.StartsWith("audio")) {
-      filePath = await FileService.SaveFile(file, chatId, user.Id, file.ContentType.StartsWith("image") ? FileType.Audio : FileType.Video);
+      filePath = await FileService.SaveFile(
+        file,
+        chatId,
+        user.Id,
+        file.ContentType.StartsWith("image") ? FileType.Audio : FileType.Video
+      );
     } else {
       filePath = await FileService.SaveFile(file, chatId, user.Id, FileType.Other);
     }

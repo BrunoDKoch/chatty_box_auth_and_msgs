@@ -1,9 +1,7 @@
-using System.Net;
 using Microsoft.Extensions.Localization;
 using Microsoft.AspNetCore.Diagnostics;
 using System.Net.Mime;
 using ChattyBox.Models;
-using Microsoft.Extensions.FileProviders;
 
 namespace ChattyBox.Middleware;
 
@@ -25,7 +23,7 @@ public class ErrorHandlerMiddleware : IMiddleware {
   async private Task HandleUserError(HttpContext context, IExceptionHandlerPathFeature ex) {
     var exType = ex.GetType();
     var path = context.Request.Path.Value;
-    if (String.IsNullOrEmpty(path)) return;
+    if (string.IsNullOrEmpty(path)) return;
     path = path.ToLower();
     if (path.EndsWith("login")) {
       await HandleLoginError(context, ex);

@@ -12,7 +12,7 @@ public class UserInitialData {
 }
 
 public class UserCreate : User {
-  private PasswordHasher<User> passwordHasher = new PasswordHasher<User>();
+  private readonly PasswordHasher<User> passwordHasher = new();
   public UserCreate(UserInitialData data) {
     Email = data.Email;
     UserName = data.UserName;
@@ -72,7 +72,7 @@ public class ChatMessage {
 }
 
 public class MessagesSearchResults {
-  public List<ChatMessage> Messages = new List<ChatMessage>();
+  public List<ChatMessage> Messages = new();
   public int MessageCount { get; set; }
 }
 
@@ -101,7 +101,7 @@ public class CompleteChatResponse {
     Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
     SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
-    MessageCount = chat.Messages.Count();
+    MessageCount = chat.Messages.Count;
   }
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages) {
     Id = chat.Id;
@@ -114,7 +114,7 @@ public class CompleteChatResponse {
     Messages = messages;
     SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
-    MessageCount = chat.Messages.Count();
+    MessageCount = chat.Messages.Count;
   }
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages, int messageCount) {
     Id = chat.Id;
@@ -229,7 +229,7 @@ public class UserPartialResponse {
 
 public class UserDetailedResponse : UserPartialResponse {
 
-  private List<UserPartialResponse> GetFriendsInCommon(User user, string requestingUserId) {
+  static private List<UserPartialResponse> GetFriendsInCommon(User user, string requestingUserId) {
     var list1 = user.Friends
       .Where(
           f => f.Friends.Any(ff => ff.Id == requestingUserId) ||
@@ -246,8 +246,8 @@ public class UserDetailedResponse : UserPartialResponse {
   }
   public bool FriendRequestPending;
   public bool IsFriend;
-  public List<UserPartialResponse> FriendsInCommon = new List<UserPartialResponse>();
-  public List<ChatBasicInfo> ChatsInCommon = new List<ChatBasicInfo>();
+  public List<UserPartialResponse> FriendsInCommon = new();
+  public List<ChatBasicInfo> ChatsInCommon = new();
   public bool IsAdmin;
 
   public UserDetailedResponse(User user, string requestingUserId) : base(user, requestingUserId) {
@@ -325,7 +325,7 @@ public class LoginAttemptPartial {
 }
 
 public class LoginAttemptsResponse {
-  public List<LoginAttemptPartial> UserLoginAttempts = new List<LoginAttemptPartial>();
+  public List<LoginAttemptPartial> UserLoginAttempts = new();
   public int Count { get; set; }
 }
 

@@ -8,22 +8,6 @@ namespace ChattyBox.Database;
 
 public class AdminDB {
 
-  private readonly UserManager<User> _userManager;
-  private readonly RoleManager<Role> _roleManager;
-  private readonly IConfiguration _configuration;
-  private readonly SignInManager<User> _signInManager;
-
-  public AdminDB(
-      UserManager<User> userManager,
-      RoleManager<Role> roleManager,
-      IConfiguration configuration,
-      SignInManager<User> signInManager) {
-    _userManager = userManager;
-    _roleManager = roleManager;
-    _configuration = configuration;
-    _signInManager = signInManager;
-  }
-
   // Create
   async public Task<UserReport> CreateReport(ReportRequest reportRequest, string reportingUserId) {
     using var ctx = new ChattyBoxContext();

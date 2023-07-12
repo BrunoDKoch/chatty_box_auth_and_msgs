@@ -27,10 +27,10 @@ public class EmailData {
     var port = configuration.GetValue<int>("Email:Port");
     var mainAddress = configuration.GetValue<string>("Email:MainAddress");
     var password = configuration.GetValue<string>("Email:Password");
-    ArgumentNullException.ThrowIfNullOrEmpty(host);
+    ArgumentException.ThrowIfNullOrEmpty(host);
     ArgumentNullException.ThrowIfNull(port);
-    ArgumentNullException.ThrowIfNullOrEmpty(mainAddress);
-    ArgumentNullException.ThrowIfNullOrEmpty(password);
+    ArgumentException.ThrowIfNullOrEmpty(mainAddress);
+    ArgumentException.ThrowIfNullOrEmpty(password);
     Host = host;
     Port = port;
     MainAddress = mainAddress;
@@ -79,7 +79,7 @@ public class EmailService {
   async private Task<string> GetAdditionalElement(string toAppend, bool isLink = false, string itemAndToken = "") {
     var additionalElement = await File.ReadAllTextAsync(Path.Combine(_basePath, isLink ? "ButtonRowTemplate.html" : "CodeTextTemplate.html"), Encoding.UTF8);
     additionalElement = additionalElement.Replace(isLink ? "BtnText" : "CodeText", toAppend);
-    if (!String.IsNullOrEmpty(itemAndToken))
+    if (!string.IsNullOrEmpty(itemAndToken))
       additionalElement = additionalElement.Replace("link", $"{_configuration.GetValue<string>("JsonWebToken:Audience")}/recovery/{itemAndToken}");
     return additionalElement;
   }
@@ -136,7 +136,7 @@ public class EmailService {
       to: emailAddress
     );
     message.Subject = GetTitle(emailType);
-    message.Body = String.IsNullOrEmpty(itemAndToken) ? await GetEmailBody(emailType, otpCode) : await GetEmailBody(emailType, itemAndToken: itemAndToken);
+    message.Body = string.IsNullOrEmpty(itemAndToken) ? await GetEmailBody(emailType, otpCode) : await GetEmailBody(emailType, itemAndToken: itemAndToken);
     message.IsBodyHtml = true;
     await client.SendMailAsync(message);
   }

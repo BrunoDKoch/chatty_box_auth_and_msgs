@@ -31,14 +31,14 @@ public class MessagesDB {
     _maxMindClient = maxMindClient;
   }
 
-  async private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
+  async static private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
     var readMessage = await ctx.ReadMessages.Where(rm => rm.MessageId == message.Id).ToListAsync();
     ctx.ReadMessages.RemoveRange(readMessage);
     ctx.Messages.Remove(message);
     await ctx.SaveChangesAsync();
   }
 
-  async private Task<ClientConnection?> CheckExistingConnection(
+  async static private Task<ClientConnection?> CheckExistingConnection(
     ChattyBoxContext ctx,
     string userId,
     string connectionId,
@@ -144,7 +144,7 @@ public class MessagesDB {
       Users = await ctx.Users.Where(u => userIds.Contains(u.Id) || u.Id == mainUserId).ToListAsync(),
       Admins = new List<User> { await ctx.Users.FirstAsync(u => u.Id == mainUserId) },
       MaxUsers = maxUsers ?? 99,
-      IsGroupChat = userIds.Count() > 1
+      IsGroupChat = userIds.Count > 1
     };
     await ctx.Chats.AddAsync(newChat);
     await ctx.SaveChangesAsync();
@@ -251,7 +251,7 @@ public class MessagesDB {
     int skip,
     string mainUserId
     ) {
-    if (String.IsNullOrEmpty(search) && startDate is null && endDate is null && userIds.Count() <= 0) return null;
+    if (string.IsNullOrEmpty(search) && startDate is null && endDate is null && userIds.Count <= 0) return null;
     var mainUser = await _userManager.FindByIdAsync(mainUserId);
     ArgumentNullException.ThrowIfNull(mainUser);
     using var ctx = new ChattyBoxContext();
@@ -261,10 +261,10 @@ public class MessagesDB {
 
     // Initialize preliminary results, append where clauses for each condition
     IEnumerable<Message> preliminaryResults = orderedMessages;
-    if (!String.IsNullOrEmpty(search)) preliminaryResults = preliminaryResults.Where(m => m.Text.ToLower().Contains(search.ToLower()));
+    if (!string.IsNullOrEmpty(search)) preliminaryResults = preliminaryResults.Where(m => m.Text.ToLower().Contains(search.ToLower()));
     if (startDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt >= startDate);
     if (endDate != null) preliminaryResults = preliminaryResults.Where(m => m.SentAt <= endDate);
-    if (userIds.Count() > 0) preliminaryResults = preliminaryResults.Where(m => userIds.Contains(m.FromId));
+    if (userIds.Count > 0) preliminaryResults = preliminaryResults.Where(m => userIds.Contains(m.FromId));
 
     // Convert type and return
     var searchResults = preliminaryResults.Skip(skip).Take(15).Select(m => new ChatMessage(m, mainUserId)).ToList();
@@ -283,8 +283,8 @@ public class MessagesDB {
   }
 
   async public Task<List<ChatPreview>> SearchForChats(string? chatName, string? userName, string requestingUserId) {
-    if (String.IsNullOrEmpty(chatName) && String.IsNullOrEmpty(userName))
-      throw new ArgumentNullException("chat name and username cannot both be empty");
+    if (string.IsNullOrEmpty(chatName) && string.IsNullOrEmpty(userName))
+      throw new ArgumentNullException(chatName,  "username and chat name are both empty!");
 
     using var ctx = new ChattyBoxContext();
     var chats = 
@@ -292,9 +292,9 @@ public class MessagesDB {
         .Include(c => c.Users)
         .Include(c => c.Messages)
         .Where(
-          c => !String.IsNullOrEmpty(userName) ?
+          c => !string.IsNullOrEmpty(userName) ?
           c.Users.Any(u => u.NormalizedUserName!.Contains(userName.ToUpper())) :
-          c.ChatName != null && !String.IsNullOrEmpty(chatName) && c.ChatName.ToUpper().Contains(chatName.ToUpper())
+          c.ChatName != null && !string.IsNullOrEmpty(chatName) && c.ChatName.ToUpper().Contains(chatName.ToUpper())
         )
         .Select(c => new ChatPreview(c, requestingUserId))
         .ToListAsync();

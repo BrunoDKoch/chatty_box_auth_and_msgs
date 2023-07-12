@@ -7,7 +7,7 @@ namespace ChattyBox.Localization;
 
 public class JsonStringLocalizer : IStringLocalizer {
   private readonly IDistributedCache _cache;
-  private readonly JsonSerializer _serializer = new JsonSerializer();
+  private readonly JsonSerializer _serializer = new();
   public JsonStringLocalizer(IDistributedCache cache) {
     _cache = cache;
   }
@@ -27,17 +27,16 @@ public class JsonStringLocalizer : IStringLocalizer {
   }
   public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) {
     string filePath = $"Resources/{Thread.CurrentThread.CurrentCulture.Name}.json";
-    using (var str = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-    using (var sReader = new StreamReader(str))
-    using (var reader = new JsonTextReader(sReader)) {
-      while (reader.Read()) {
-        if (reader.TokenType != JsonToken.PropertyName)
-          continue;
-        string key = (string)reader.Value!;
-        reader.Read();
-        string value = _serializer.Deserialize<string>(reader)!;
-        yield return new LocalizedString(key, value, false);
-      }
+    using var str = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    using var sReader = new StreamReader(str);
+    using var reader = new JsonTextReader(sReader);
+    while (reader.Read()) {
+      if (reader.TokenType != JsonToken.PropertyName)
+        continue;
+      string key = (string)reader.Value!;
+      reader.Read();
+      string value = _serializer.Deserialize<string>(reader)!;
+      yield return new LocalizedString(key, value, false);
     }
   }
   private string GetString(string key) {
@@ -51,21 +50,20 @@ public class JsonStringLocalizer : IStringLocalizer {
       if (!string.IsNullOrEmpty(result)) _cache.SetString(cacheKey, result);
       return result;
     }
-    return String.Empty;
+    return string.Empty;
   }
   private string? GetValueFromJSON(string propertyName, string filePath) {
     if (propertyName == null) return default;
     if (filePath == null) return default;
-    using (var str = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-    using (var sReader = new StreamReader(str))
-    using (var reader = new JsonTextReader(sReader)) {
-      while (reader.Read()) {
-        if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value! == propertyName) {
-          reader.Read();
-          return _serializer.Deserialize<string>(reader);
-        }
+    using var str = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    using var sReader = new StreamReader(str);
+    using var reader = new JsonTextReader(sReader);
+    while (reader.Read()) {
+      if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value! == propertyName) {
+        reader.Read();
+        return _serializer.Deserialize<string>(reader);
       }
-      return default;
     }
+    return default;
   }
 }

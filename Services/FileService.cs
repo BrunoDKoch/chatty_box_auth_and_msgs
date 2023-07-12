@@ -9,66 +9,63 @@ public enum FileType {
 }
 
 static public class FileService {
-  static private string GetFilePath(FileType fileType) {
-    string fileDirectory;
-    switch (fileType) {
-      case FileType.Image:
-        fileDirectory = "image";
-        break;
-      case FileType.Audio:
-        fileDirectory = "audio";
-        break;
-      case FileType.Video:
-        fileDirectory = "video";
-        break;
-      default:
-        fileDirectory = "files";
-        break;
-    }
+  static private string GetFilesDirectory(FileType fileType) {
+    string fileDirectory = fileType switch {
+      FileType.Image => "images",
+      FileType.Audio => "audio",
+      FileType.Video => "video",
+      _ => "files",
+    };
     return Path.Combine("static", fileDirectory);
   }
 
   static private Size SetImageSize(ImageSize size) {
-    switch (size) {
-      case ImageSize.Small:
-        return new Size(50);
-      case ImageSize.Medium:
-        return new Size(100);
-      default:
-        return new Size(150);
-    }
+    return size switch {
+      ImageSize.Small => new Size(50),
+      ImageSize.Medium => new Size(100),
+      _ => new Size(150),
+    };
   }
-  async static public Task<string> SaveFile(IFormFile file, string chatId, string userId, FileType fileType) {
-    var fileName = file.FileName;
-    var filesPath = GetFilePath(fileType);
-    var savePath = Path.Combine(filesPath, chatId, userId);
+  static private string GetFilePath(string fileName, FileType fileType, string topDirectory, string lowerDirectory) {
+    var filesPath = GetFilesDirectory(fileType);
+    var savePath = Path.Combine(filesPath, topDirectory, lowerDirectory);
     if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
     var filePath = Path.Combine(savePath, fileName);
+    return filePath;
+  }
+
+  static private string GetFileName(FileType fileType, IFormFile? file = null, Uri? uri = null, bool isAvatar = false) {
+    if (uri is not null && file is null) {
+      var name = isAvatar ? "avatar" : Guid.NewGuid().ToString();
+      return $"{name}.png";
+    }
+    ArgumentNullException.ThrowIfNull(file);
+    if (fileType != FileType.Image) return file.FileName;
+    return isAvatar ? $"avatar.{Path.GetExtension(file.FileName)}" : file.FileName;
+  }
+  async static public Task<string> SaveFile(IFormFile file, string chatId, string userId, FileType fileType) {
+    var fileName = GetFileName(fileType, file);
+    var filePath = GetFilePath(fileName, fileType, chatId, userId);
+    
     using var stream = new FileStream(filePath, FileMode.Create);
     await file.CopyToAsync(stream);
     return filePath;
   }
 
-  static public async Task<string> SaveImage(IFormFile file, User user, IWebHostEnvironment webHostEnvironment, bool isAvatar = false) {
-    var name = isAvatar ? "avatar" : Guid.NewGuid().ToString();
-    var fileName = $"{name}{Path.GetExtension(file.FileName)}";
-    var imagesPath = Path.Combine("static", "images");
-    var savePath = Path.Combine(imagesPath, user.Id, "avatar");
-    if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
-    var filePath = Path.Combine(savePath, fileName);
+  static public async Task<string> SaveImage(IFormFile file, User user, bool isAvatar = false) {
+    var fileName = GetFileName(FileType.Image, file, isAvatar: isAvatar);
+    var filePath = GetFilePath(fileName, FileType.Image, user.Id, isAvatar ? "avatar" : "images");
+
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
     return filePath;
   }
 
-  static public async Task<string> SaveImage(IFormFile file, User user, IWebHostEnvironment webHostEnvironment, string chatId) {
-    var name = Guid.NewGuid().ToString();
-    var fileName = $"{name}{Path.GetExtension(file.FileName)}";
-    var imagesPath = Path.Combine("static", "images");
-    var savePath = Path.Combine(imagesPath, chatId, user.Id);
-    if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
-    var filePath = Path.Combine(savePath, fileName);
+  static public async Task<string> SaveImage(IFormFile file, User user, string chatId) {
+    var fileName = GetFileName(FileType.Image, file);
+    var filePath = GetFilePath(fileName, FileType.Image, chatId, user.Id);
+
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
@@ -76,15 +73,11 @@ static public class FileService {
   }
 
   static public async Task<string> SaveImage(Uri uri, User user, bool isAvatar = false) {
-    var name = isAvatar ? "avatar" : Guid.NewGuid().ToString();
-    var fileName = $"{name}.png";
-    var imagesPath = Path.Combine("static", "images");
-    var savePath = Path.Combine(imagesPath, user.Id, "avatar");
-    if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
-    var filePath = Path.Combine(savePath, fileName);
+    var fileName = GetFileName(FileType.Image, uri: uri, isAvatar: isAvatar);
+    var filePath = GetFilePath(fileName, FileType.Image, user.Id, isAvatar ? "avatar" : "images");
+
     using var client = new HttpClient();
     var response = await client.GetAsync(uri);
-    
     using var image = await Image.LoadAsync(await response.Content.ReadAsStreamAsync());
     await image.SaveAsPngAsync(filePath);
     return filePath;

@@ -22,33 +22,27 @@ public class AdminController : ControllerBase {
   private readonly RoleManager<Role> _roleManager;
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
-  private readonly WebServiceClient _maxMindClient;
-  private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
   private readonly IStringLocalizer<AdminController> _localizer;
-  private AdminDB _adminDB;
+  private readonly AdminDB _adminDB;
 
   public AdminController(
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
       SignInManager<User> signInManager,
-      WebServiceClient maxMindClient,
-      IWebHostEnvironment webHostEnvironment,
       IHubContext<MessagesHub> hubContext,
       IStringLocalizer<AdminController> localizer) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
-    _maxMindClient = maxMindClient;
-    _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
     _localizer = localizer;
-    _adminDB = new AdminDB(_userManager, _roleManager, _configuration, _signInManager);
+    _adminDB = new AdminDB();
   }
 
-  private string GetAdminActionString(AdminActionRequest actionRequest) {
+  static private string GetAdminActionString(AdminActionRequest actionRequest) {
     if (!actionRequest.ViolationFound)
       return "none";
     else if (actionRequest.PermanentLockout)
@@ -159,7 +153,7 @@ public class AdminController : ControllerBase {
       .ToListAsync();
     var users = suspendedUsers.Skip(skip)
       .Take(take);
-    var total = suspendedUsers.Count();
+    var total = suspendedUsers.Count;
     return Ok(new { users, total });
   }
 }

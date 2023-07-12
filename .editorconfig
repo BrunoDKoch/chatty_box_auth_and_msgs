@@ -1,4 +1,11 @@
+root = true
+
 [*]
+indent_style = space
+indent_size = 2
+max_line_lenght = 100
+
+[*.cs]
 csharp_new_line_before_open_brace = false
 csharp_new_line_before_else = false
 csharp_new_line_before_catch = false
@@ -6,4 +13,4 @@ csharp_new_line_before_finally = false
 csharp_new_line_before_members_in_object_initializers = false
 csharp_new_line_before_members_in_anonymous_types = false
 csharp_new_line_between_query_expression_clauses = false
-max_line_lenght = 100
+csharp_max_line_length = 100

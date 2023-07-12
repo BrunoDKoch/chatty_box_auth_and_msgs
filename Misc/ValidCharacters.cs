@@ -3,8 +3,8 @@ using System;
 namespace ChattyBox.Misc;
 
 public static class ValidCharacters {
-  static string[] vowels = { "a", "e", "i", "o", "u" };
-  static char[] accents = { '\u0300', '\u0301', '\u0302', '\u0303', '\u0308' };
+  static readonly string[] vowels = { "a", "e", "i", "o", "u" };
+  static readonly char[] accents = { '\u0300', '\u0301', '\u0302', '\u0303', '\u0308' };
 
   public static string GetLetters() {
     var englishAlphabet = new List<string>();
