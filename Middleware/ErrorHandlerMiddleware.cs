@@ -21,7 +21,6 @@ public class ErrorHandlerMiddleware : IMiddleware {
   }
 
   async private Task HandleUserError(HttpContext context, IExceptionHandlerPathFeature ex) {
-    var exType = ex.GetType();
     var path = context.Request.Path.Value;
     if (string.IsNullOrEmpty(path)) return;
     path = path.ToLower();
@@ -52,20 +51,15 @@ public class ErrorHandlerMiddleware : IMiddleware {
         await HandleUserError(context, ex);
         return;
       }
-      string message;
-      context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-      switch (ex.Error) {
-        case CustomException e:
-          context.Response.StatusCode = (int)((CustomException)ex).Status;
-          message = $"{_localizer.GetString(context.Response.StatusCode.ToString())}";
-          break;
-        case Microsoft.Data.SqlClient.SqlException sqlException:
-          message = $"{_localizer.GetString("DatabaseError")} {sqlException.Number}";
-          break;
-        default:
-          message = $"{_localizer.GetString(context.Response.StatusCode.ToString())}";
-          break;
-      }
+
+      context.Response.StatusCode = ex.Error switch {
+        CustomException e => (int)e.Status,
+        _ => StatusCodes.Status500InternalServerError,
+      };
+      string message = ex.Error switch {
+        Microsoft.Data.SqlClient.SqlException sqlException => $"{_localizer.GetString("DatabaseError")} {sqlException.Number}",
+        _ => $"{_localizer.GetString(context.Response.StatusCode.ToString())}",
+      };
       message += $"\n{_localizer.GetString("ErrorLogged").Value} {errorId}";
       await context.Response.WriteAsync(message);
     }
