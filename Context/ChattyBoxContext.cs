@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using ChattyBox.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
 
 namespace ChattyBox.Context;
 

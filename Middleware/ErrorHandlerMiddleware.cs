@@ -11,16 +11,24 @@ public class ErrorHandlerMiddleware : IMiddleware {
     _localizer = localizer;
   }
 
-  async private Task HandleLoginError(HttpContext context, IExceptionHandlerPathFeature ex) {
-    if (ex.Error.GetType().ToString() == "ArgumentNullException") {
-      context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-      await context.Response.WriteAsync(_localizer.GetString("401Auth"));
-      return;
+  async private Task HandleLoginError(HttpContext context, Exception ex) {
+    switch (ex) {
+      case ArgumentNullException:
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsync(_localizer.GetString("401Auth"));
+        break;
+      case MFACodeRequiredException:
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("");
+        break;
+      default:
+        await context.Response.WriteAsync(_localizer.GetString($"{context.Response.StatusCode}"));
+        break;
     }
-    await context.Response.WriteAsync(_localizer.GetString($"{context.Response.StatusCode}"));
+    
   }
 
-  async private Task HandleUserError(HttpContext context, IExceptionHandlerPathFeature ex) {
+  async private Task HandleUserError(HttpContext context, Exception ex) {
     var path = context.Request.Path.Value;
     if (string.IsNullOrEmpty(path)) return;
     path = path.ToLower();
@@ -40,23 +48,25 @@ public class ErrorHandlerMiddleware : IMiddleware {
     try {
       await next(context);
     } catch (Exception exception) {
-      var ex = context.Features.Get<IExceptionHandlerPathFeature>();
-      if (ex is null) return;
+      Console.ForegroundColor = ConsoleColor.Red;
+      Console.Error.WriteLine(exception);
+      Console.ResetColor();
       context.Response.ContentType = MediaTypeNames.Application.Json;
       string errorId = Guid.NewGuid().ToString();
-      exception.AddSentryTag("source", ex.Path ?? "unknown");
+      exception.AddSentryTag("path", context.Request.Path.ToString() ?? "unknown");
+      exception.AddSentryTag("ip", context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
       exception.AddSentryTag("stackTrace", exception.StackTrace!);
       exception.AddSentryTag("id", errorId);
       if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("/api/v1/User")) {
-        await HandleUserError(context, ex);
+        await HandleUserError(context, exception);
         return;
       }
 
-      context.Response.StatusCode = ex.Error switch {
+      context.Response.StatusCode = exception switch {
         CustomException e => (int)e.Status,
         _ => StatusCodes.Status500InternalServerError,
       };
-      string message = ex.Error switch {
+      string message = exception switch {
         Microsoft.Data.SqlClient.SqlException sqlException => $"{_localizer.GetString("DatabaseError")} {sqlException.Number}",
         _ => $"{_localizer.GetString(context.Response.StatusCode.ToString())}",
       };

@@ -21,6 +21,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.FileProviders;
 using ChattyBox.Services;
 using ChattyBox.Middleware;
+using ChattyBox.Database;
 
 var reqOrigin = "_reqOrigin";
 
@@ -37,7 +38,7 @@ if (builder.Environment.IsDevelopment()) {
 // Add services to the container.
 builder.Services.AddCors(options => {
   options.AddPolicy(name: reqOrigin, policy => {
-    policy.WithOrigins(builder.Configuration.GetValue<string>("WebsiteUrl")!)
+    policy.WithOrigins(builder.Configuration.GetValue<string>("WebsiteUrl")!, builder.Configuration.GetSection("Sentry").GetValue<string>("Dsn")!)
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials();
@@ -138,6 +139,9 @@ builder.Services.AddLocalization();
 builder.Services.AddSingleton<LocalizationMiddleware>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();
+builder.Services.AddScoped<UserDB>();
+builder.Services.AddScoped<MessagesDB>();
+builder.Services.AddScoped<AdminDB>();
 builder.Services.AddTransient<ErrorHandlerMiddleware>();
 builder.Services.AddSingleton<EmailService>();
 

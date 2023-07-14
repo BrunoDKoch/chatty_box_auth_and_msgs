@@ -35,6 +35,7 @@ public class AdminDB {
       .Include(r => r.Message)
       .Include(r => r.AdminActions)
         .ThenInclude(a => a.Admin)
+        .AsSplitQuery()
       .OrderByDescending(r => r.SentAt)
       .Skip(skip)
       .Take(take)
@@ -47,13 +48,18 @@ public class AdminDB {
     var reports = await ctx.UserReports
       .Include(r => r.ReportedUser)
         .ThenInclude(u => u.ReportsAgainstUser.Where(r => r.ViolationFound == null || (bool)r.ViolationFound))
+        .AsSplitQuery()
       .Include(r => r.ReportingUser)
+      .AsSplitQuery()
       .Include(r => r.Chat)
+      .AsSplitQuery()
       .Include(r => r.Message)
+      .AsSplitQuery()
       .Include(r => r.AdminActions)
         .ThenInclude(a => a.Admin)
+        .AsSplitQuery()
       .Where(
-        r => excludePending ? 
+        r => excludePending ?
         r.ViolationFound != null && (!(bool)r.ViolationFound) || r.AdminActions.Any() :
         r.ViolationFound == null || ((bool)r.ViolationFound && !r.AdminActions.Any())
       )
@@ -68,9 +74,13 @@ public class AdminDB {
     using var ctx = new ChattyBoxContext();
     var report = await ctx.UserReports
       .Include(r => r.ReportedUser)
+      .AsSplitQuery()
       .Include(r => r.ReportingUser)
+      .AsSplitQuery()
       .Include(r => r.Chat)
+      .AsSplitQuery()
       .Include(r => r.Message)
+      .AsSplitQuery()
       .FirstOrDefaultAsync(r => r.Id == id);
     ArgumentNullException.ThrowIfNull(report);
     return report;

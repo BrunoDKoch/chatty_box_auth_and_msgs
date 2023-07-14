@@ -32,14 +32,15 @@ public class AdminController : ControllerBase {
       IConfiguration configuration,
       SignInManager<User> signInManager,
       IHubContext<MessagesHub> hubContext,
-      IStringLocalizer<AdminController> localizer) {
+      IStringLocalizer<AdminController> localizer,
+      AdminDB adminDB) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
     _hubContext = hubContext;
     _localizer = localizer;
-    _adminDB = new AdminDB();
+    _adminDB = adminDB;
   }
 
   static private string GetAdminActionString(AdminActionRequest actionRequest) {

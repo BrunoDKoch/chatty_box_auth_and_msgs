@@ -26,8 +26,8 @@ public class SuspiciousLocationException : CustomException {
   public SuspiciousLocationException(string message) : base(message, HttpStatusCode.Forbidden) { }
 }
 
-public class MFACodeRequired : CustomException {
-  public MFACodeRequired(string message) : base(message, HttpStatusCode.BadRequest) { }
+public class MFACodeRequiredException : CustomException {
+  public MFACodeRequiredException(string message) : base(message, HttpStatusCode.BadRequest) { }
 }
 
 public class EmailConfirmationException : CustomException {

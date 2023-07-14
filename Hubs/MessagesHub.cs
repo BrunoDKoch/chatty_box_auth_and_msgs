@@ -30,14 +30,17 @@ public class MessagesHub : Hub {
       IConfiguration configuration,
       SignInManager<User> signInManager,
       MaxMind.GeoIP2.WebServiceClient maxMindClient,
-      IStringLocalizer<MessagesHub> localizer) {
+      IStringLocalizer<MessagesHub> localizer,
+      UserDB userDB,
+      MessagesDB messagesDB,
+      AdminDB adminDB) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
-    _userDB = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
-    _messagesDB = new MessagesDB(_userManager, _roleManager, _configuration, _signInManager, maxMindClient);
-    _adminDB = new AdminDB();
+    _userDB = userDB;
+    _messagesDB = messagesDB;
+    _adminDB = adminDB;
     _localizer = localizer;
   }
 
@@ -119,10 +122,13 @@ public class MessagesHub : Hub {
         var user = await _userManager.Users
           .Include(u => u.Roles)
           .Include(u => u.Chats)
+          .AsSplitQuery()
           .Include(u => u.Friends)
             .ThenInclude(f => f.ClientConnections)
+          .AsSplitQuery()
           .Include(u => u.IsFriendsWith)
             .ThenInclude(f => f.ClientConnections)
+          .AsSplitQuery()
           .FirstOrDefaultAsync(u => u.Id == id);
         ArgumentNullException.ThrowIfNull(user);
 

@@ -41,7 +41,8 @@ public class UserController : ControllerBase {
       IWebHostEnvironment webHostEnvironment,
       IHubContext<MessagesHub> hubContext,
       IStringLocalizer<UserController> localizer,
-      EmailService emailService) {
+      EmailService emailService,
+      UserDB userDb) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
@@ -51,7 +52,7 @@ public class UserController : ControllerBase {
     _hubContext = hubContext;
     _localizer = localizer;
     _emailService = emailService;
-    _userDb = new UserDB(_userManager, _roleManager, _configuration, _signInManager);
+    _userDb = userDb;
   }
 
   static private string JoinThreeStrings(string string1, string string2, string string3, bool includesVersionNumber = false) {
@@ -134,7 +135,7 @@ public class UserController : ControllerBase {
     // Check if requires 2FA (will return false if device is remembered)
     if (signInSuccess.RequiresTwoFactor) {
       // If yes, but no code is given, return status 400
-      if (data.MFACode == null || string.IsNullOrEmpty(data.MFACode)) return null;
+      if (string.IsNullOrEmpty(data.MFACode)) return null;
       signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
       await _userManager.ResetAccessFailedCountAsync(user);
     }
@@ -145,9 +146,10 @@ public class UserController : ControllerBase {
 
   async private Task<LoginAttemptResult> HandleLoginAttempt(User user, LogInInfo data) {
     var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
+    ArgumentNullException.ThrowIfNull(loginAttempt);
     var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
     loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
-    ArgumentNullException.ThrowIfNull(loginAttempt);
+    if (loginAttempt is null) throw new MFACodeRequiredException("");
 
     using var ctx = new ChattyBoxContext();
     await ctx.UserLoginAttempts.AddAsync(loginAttempt);
@@ -248,7 +250,7 @@ public class UserController : ControllerBase {
     ArgumentNullException.ThrowIfNull(user);
 
     // If email is not confirmed, re-send confirmation and prevent login
-    if (!(await CheckIfEmailIsVerified(user))) {
+    if (!await CheckIfEmailIsVerified(user)) {
       throw new EmailConfirmationException();
     }
 
@@ -296,16 +298,6 @@ public class UserController : ControllerBase {
     var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
     if (result.Succeeded) return Ok();
     return Unauthorized();
-  }
-
-  [HttpGet("Login")]
-  async public Task<IActionResult> RefreshLogin([FromQuery] string? ReturnUrl) {
-    var userClaim = HttpContext.User;
-    var user = await _userManager.GetUserAsync(userClaim);
-    ArgumentNullException.ThrowIfNull(user);
-    await _signInManager.RefreshSignInAsync(user);
-    if (!string.IsNullOrEmpty(ReturnUrl)) return Redirect(ReturnUrl);
-    return Ok();
   }
 
   [HttpGet]

@@ -172,11 +172,15 @@ public class MessagesDB {
         c => c.Users.Any(u => u.Id == userId)
       )
       .Include(c => c.Users)
+      .AsSplitQuery()
       .Include(c => c.ChatNotificationSettings)
+      .AsSplitQuery()
       .Include(c => c.Messages)
         .ThenInclude(m => m.From)
+        .AsSplitQuery()
       .Include(c => c.Messages)
         .ThenInclude(m => m.ReadBy)
+        .AsSplitQuery()
       .ToListAsync();
     if (chats.Count == 0) return new List<ChatPreview>();
     var chatPreviews = chats
@@ -194,8 +198,10 @@ public class MessagesDB {
       .Skip(skip)
       .Take(15)
       .Include(m => m.From)
+      .AsSplitQuery()
       .Include(m => m.ReadBy)
         .ThenInclude(r => r.ReadBy)
+        .AsSplitQuery()
       .Select(m => new ChatMessage(m, userId, false))
       .ToListAsync();
     var messageCount = await ctx.Messages.Where(m => m.ChatId == chatId).CountAsync();
@@ -203,12 +209,16 @@ public class MessagesDB {
       .Include(c => c.Admins)
       .Include(c => c.SystemMessages.Where(sm => messages.Any() && messages.Select(m => m.SentAt.Date).ToList().Contains(sm.FiredAt.Date)))
         .ThenInclude(sm => sm.InstigatingUser)
+        .AsSplitQuery()
       .Include(c => c.SystemMessages)
         .ThenInclude(sm => sm.AffectedUser)
+        .AsSplitQuery()
       .Include(c => c.Users)
         .ThenInclude(u => u.Blocking)
+        .AsSplitQuery()
       .Include(c => c.Users)
         .ThenInclude(u => u.BlockedBy)
+        .AsSplitQuery()
       .FirstAsync(c => c.Id == chatId);
 
     return new CompleteChatResponse(chat, messages, messageCount, userId);
@@ -326,8 +336,10 @@ public class MessagesDB {
     var message = await ctx.Messages
       .Include(m => m.ReadBy)
         .ThenInclude(r => r.ReadBy)
+        .AsSplitQuery()
       .Include(m => m.From)
         .ThenInclude(f => f.ClientConnections)
+        .AsSplitQuery()
       .FirstAsync(m => m.Id == messageId);
     if (message.ReadBy.Any(r => r.ReadBy.Id == userId)) return null;
     var user = await ctx.Users.FirstAsync(u => u.Id == userId);
