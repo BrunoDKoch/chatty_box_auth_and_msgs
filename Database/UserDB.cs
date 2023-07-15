@@ -1,8 +1,13 @@
 using ChattyBox.Models;
+using ChattyBox.Models.AdditionalModels;
 using ChattyBox.Context;
+using ChattyBox.Services;
+using ChattyBox.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
+using Microsoft.Extensions.Localization;
+using Humanizer;
 
 namespace ChattyBox.Database;
 
@@ -11,18 +16,82 @@ public class UserDB {
   private readonly UserManager<User> _userManager;
   private readonly RoleManager<Role> _roleManager;
   private readonly IConfiguration _configuration;
-  private readonly SignInManager<User> _signInManager;
+  private readonly EmailService _emailService;
+  private readonly LoginAttemptHelper _loginAttemptHelper;
+  private readonly IStringLocalizer<UserDB> _localizer;
 
   public UserDB(
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
-      SignInManager<User> signInManager) {
+      EmailService emailService,
+      IStringLocalizer<UserDB> localizer,
+      LoginAttemptHelper loginAttemptHelper) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
-    _signInManager = signInManager;
+    _emailService = emailService;
+    _localizer = localizer;
+    _loginAttemptHelper = loginAttemptHelper;
   }
+
+  static private User EnsureUserIsNotNull(User? user) {
+    ArgumentNullException.ThrowIfNull(user);
+    return user!;
+  }
+
+  // Private auth-related methods
+  async private Task RemoveOTPClaimFromUser(User user) {
+    var claims = await _userManager.GetClaimsAsync(user);
+    var claim = claims.FirstOrDefault(c => c.Type == "OTP");
+    ArgumentNullException.ThrowIfNull(claim);
+    await _userManager.RemoveClaimAsync(user, claim);
+  }
+
+  async private Task<(bool, Claim?)> CheckIfEmailIsVerified(User user) {
+    var isVerified = await _userManager.IsEmailConfirmedAsync(user);
+    Claim? otpClaim = null;
+    if (!isVerified) {
+      await RemoveClaim(user, "OTP");
+      otpClaim = OTPClaimUtil.CreateOTPClaim("OTP");
+      await _userManager.AddClaimAsync(user, otpClaim);
+    }
+    return (isVerified, otpClaim);
+  }
+
+  // Public auth methods
+  static public bool CheckLocation(User user, UserLoginAttempt loginAttempt) {
+    var suspiciousLocation = user.UserLoginAttempts.Count > 0 && user.UserLoginAttempts
+      .Any(
+        l =>
+          l.Success &&
+          LoginAttemptHelper.CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
+      );
+    return suspiciousLocation;
+  }
+
+  async public Task<string> GetLoginFailureReason(User user) {
+    string failureReason = $"Invalid credentials.\n{_localizer.GetString("401Auth").Value}";
+    // Tell the user if their account is locked out
+    if (await _userManager.IsLockedOutAsync(user)) {
+      string failureReasonStart;
+      if (user.LockoutEnd == DateTimeOffset.MaxValue) {
+        failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
+      } else {
+        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value} " +
+          $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
+      }
+      string failureReasonEnd = $"{_localizer.GetString("Reasons")}: " +
+        string.Join(',', (
+          user.ReportsAgainstUser.Select(r => _localizer.GetString(r.ReportReason.Replace("report.", "").Pascalize()))
+          )
+        );
+
+      failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
+    };
+    return failureReason;
+  }
+
   // Create
   async public Task<FriendRequestFiltered?> CreateFriendRequest(string addingId, string addedId) {
     using var ctx = new ChattyBoxContext();
@@ -43,7 +112,61 @@ public class UserDB {
     }
   }
 
+  async public Task<User> CreateUser(UserInitialData data) {
+    var createdUser = new UserCreate(data);
+    createdUser.Avatar = await FileService.GetDefaultAvatar(createdUser);
+    var result = await _userManager.CreateAsync(createdUser);
+    if (result.Errors.Any()) {
+      var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
+      if (duplicateErrors is null || duplicateErrors.Count == 0)
+        throw new InvalidCredentialsException(string.Join("\n", result.Errors.Select(e => e.Description)));
+      throw new ConflictException(string.Join("\n", result.Errors.Select(e => e.Description)));
+    }
+    var otpClaim = OTPClaimUtil.CreateOTPClaim("OTP");
+    await _userManager.AddClaimAsync(createdUser, otpClaim);
+    return createdUser;
+  }
+
   // Read
+  async public Task<User> GetUser(string emailOrId, bool isEmailQuery = false) {
+    User? user;
+    if (!isEmailQuery) user = await _userManager.FindByIdAsync(emailOrId);
+    else user = await _userManager.FindByEmailAsync(emailOrId);
+    return EnsureUserIsNotNull(user);
+  }
+
+  async public Task<User> GetUser(HttpContext httpContext, bool getConnections = false) {
+    var user = getConnections ?
+      await _userManager.GetUserAsync(httpContext.User) :
+      await _userManager.Users
+        .Include(u => u.ClientConnections)
+        .FirstOrDefaultAsync(u => u.Id == httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
+    return EnsureUserIsNotNull(user);
+  }
+
+  async public Task<List<Claim>> GetClaims(User user) {
+    return (await _userManager.GetClaimsAsync(user)).ToList();
+  }
+
+  async public Task<User> LogInUser(LogInInfo logInInfo) {
+    var user =
+      await _userManager.Users
+        .Include(u => u.ReportsAgainstUser)
+          .AsSplitQuery()
+        .Include(u => u.UserLoginAttempts)
+          .AsSplitQuery()
+        .FirstOrDefaultAsync(u => u.Email == logInInfo.Email.Trim());
+    ArgumentNullException.ThrowIfNull(user);
+    var emailIsConfirmed = await CheckIfEmailIsVerified(user);
+
+    // If email is not confirmed, re-send confirmation and prevent login
+    if (!emailIsConfirmed.Item1) {
+      await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: emailIsConfirmed.Item2!.Value!);
+      throw new EmailConfirmationException();
+    }
+    return user;    
+  }
+
   async public Task<User> GetPreliminaryConnectionCallInfo(string userId) {
     var user = await _userManager.Users
       .Include(u => u.Friends)
@@ -232,6 +355,87 @@ public class UserDB {
   }
 
   // Update
+  async public Task AddClaim(User user, Claim claim) {
+    await _userManager.AddClaimAsync(user, claim);
+  }
+
+  async public Task<string> ChangeEmail(ChangeEmailRequest body, HttpContext context) {
+    var user = await GetUser(context);
+    var oldEmail = user.Email!;
+    if (user.NormalizedEmail != body.CurrentEmail.ToUpper())
+      throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
+    var passwordIsValid = await _userManager.CheckPasswordAsync(user, body.Password);
+    if (!passwordIsValid) throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
+    // Generate a token for undoing this
+    var token = await _userManager.GenerateChangeEmailTokenAsync(user, body.CurrentEmail);
+    await _userManager.SetEmailAsync(user, body.NewEmail);
+    return token;
+  }
+
+  async public Task<User> UndoChangeEmail(string email, string token) {
+    var user = await GetUser(email);
+    await _userManager.ChangeEmailAsync(user, email, token);
+    await _userManager.UpdateSecurityStampAsync(user);
+    return user;
+  }
+
+  async public Task ToggleMFA(MFADisableRequest request, HttpContext context) {
+    var user = await GetUser(context);
+    var result = await _userManager.CheckPasswordAsync(user, request.Password);
+    if (!result) throw new ForbiddenException(_localizer.GetString("403"));
+    var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+    await _userManager.SetTwoFactorEnabledAsync(user, !isEnabled);
+  }
+
+  async public Task<User> SetAvatarToDefault(HttpContext context) {
+    var user = await GetUser(context);
+    ArgumentException.ThrowIfNullOrEmpty(user.Avatar);
+    FileService.DeleteFile(user.Avatar);
+    using (var ctx = new ChattyBoxContext()) {
+      user.Chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == user.Id)).ToListAsync();
+    }
+
+    user.Avatar = await FileService.GetDefaultAvatar(user);
+    await _userManager.UpdateAsync(user);
+    return user;
+  }
+
+  async public Task<(string, string, List<string>)> ChangeAvatar(IFormFile file, HttpContext context) {
+    var user = await GetUser(context);
+    var avatar = await FileService.SaveImage(file, user, isAvatar: true);
+    user.Avatar = avatar;
+    await _userManager.UpdateAsync(user);
+    using var ctx = new ChattyBoxContext();
+    var groupsToNotify = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == user.Id)).Select(c => c.Id).ToListAsync();
+    groupsToNotify.Add($"{user.Id}_friends");
+    return (user.Id, avatar, groupsToNotify);
+  }
+
+  async public Task SignOut(HttpContext context, bool invalidateAllSessions) {
+    var user = await GetUser(context);
+    if (invalidateAllSessions) await _userManager.UpdateSecurityStampAsync(user);
+  }
+
+  async public Task<IdentityResult> ChangePassword(ChangePasswordRequest body, HttpContext context) {
+    var user = await GetUser(context);
+    var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
+    return result;
+  }
+
+  async public Task UpdateLoginAttempt(string userId) {
+    using var ctx = new ChattyBoxContext();
+    var loginAttempt = await ctx.UserLoginAttempts.OrderBy(l => l.AttemptedAt).FirstAsync(l => l.UserId == userId);
+    loginAttempt.Success = true;
+    await ctx.SaveChangesAsync();
+  }
+
+  async public Task<string> GeneratePasswordResetToken(User user) {
+    return await _userManager.GeneratePasswordResetTokenAsync(user);
+  }
+
+  async public Task<IdentityResult> ResetPassword(User user, PasswordResetRequest request) {
+    return await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
+  }
 
   async public Task<FriendResponse?> HandleFriendRequest(string userId, string addingId, bool accepting) {
     using var ctx = new ChattyBoxContext();
@@ -299,5 +503,36 @@ public class UserDB {
     user.Status = status;
     await _userManager.UpdateAsync(user);
     return status;
+  }
+
+  async public Task<IdentityResult> AddRole(string userId, string roleName) {
+    var user = await GetUser(userId);
+    if (!await _roleManager.RoleExistsAsync(roleName)) {
+      await _roleManager.CreateAsync(new Role { Name = roleName });
+    }
+    return await _userManager.AddToRoleAsync(user, roleName);
+  }
+
+  async public Task<IdentityResult> AddRole(User user, string roleName) {
+    if (!await _roleManager.RoleExistsAsync(roleName)) {
+      await _roleManager.CreateAsync(new Role { Name = roleName });
+    }
+    return await _userManager.AddToRoleAsync(user, roleName);
+  }
+
+  async public Task RemoveClaim(string userId, Claim claim) {
+    var user = await GetUser(userId);
+    await _userManager.RemoveClaimAsync(user, claim);
+  }
+
+  async public Task RemoveClaim(User user, Claim claim) {
+    await _userManager.RemoveClaimAsync(user, claim);
+  }
+
+  async public Task RemoveClaim(User user, string claimName) {
+    var claims = await _userManager.GetClaimsAsync(user);
+    var claim = claims.FirstOrDefault(c => c.Type == claimName);
+    ArgumentNullException.ThrowIfNull(claim);
+    await _userManager.RemoveClaimAsync(user, claim);
   }
 }

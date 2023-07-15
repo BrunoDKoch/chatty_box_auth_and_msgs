@@ -1,4 +1,6 @@
 using ChattyBox.Models;
+using ChattyBox.Models.AdditionalModels;
+using Humanizer;
 namespace ChattyBox.Services;
 
 public enum FileType {
@@ -69,6 +71,20 @@ static public class FileService {
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
+    return filePath;
+  }
+
+  static public void CheckFileSize(IFormFile file) {
+    if (file.Length.Bytes() > 20.Megabytes()) {
+      throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
+    }
+  }
+
+  async static public Task<string> GetDefaultAvatar(User user) {
+    var uri = new Uri(
+      $"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random"
+    );
+    var filePath = await FileService.SaveImage(uri, user, isAvatar: true);
     return filePath;
   }
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ChattyBox.Models;
 using ChattyBox.Context;
 using ChattyBox.Services;
+using ChattyBox.Models.AdditionalModels;
 using Microsoft.AspNetCore.Identity;
 using UAParser;
 using MaxMind.GeoIP2;

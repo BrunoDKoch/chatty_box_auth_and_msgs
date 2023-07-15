@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using ChattyBox.Models.AdditionalModels;
 using ChattyBox.Models;
 using ChattyBox.Context;
 using ChattyBox.Services;
@@ -12,6 +13,8 @@ using Microsoft.Extensions.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Humanizer;
+
+namespace ChattyBox.Controllers;
 
 [ApiController]
 [Authorize(Roles = "admin, owner")]
@@ -115,17 +118,7 @@ public class AdminController : ControllerBase {
 
   [HttpPost("Lockout/{userId}")]
   async public Task<IActionResult> LockUserOut(string userId, [FromBody] LockoutInfo lockoutInfo) {
-    var user = await _userManager.FindByIdAsync(userId);
-    ArgumentNullException.ThrowIfNull(user);
-    if (!lockoutInfo.Lockout)
-      user.LockoutEnd = DateTimeOffset.MinValue;
-    else if (lockoutInfo.Permanent)
-      user.LockoutEnd = DateTimeOffset.MaxValue;
-    else
-      user.LockoutEnd = lockoutInfo.LockoutEnd;
-
-    user.LockoutReason = lockoutInfo.LockoutReason;
-    await _userManager.UpdateAsync(user);
+    await _adminDB.LockUserOut(userId, lockoutInfo);
     return Ok();
   }
 

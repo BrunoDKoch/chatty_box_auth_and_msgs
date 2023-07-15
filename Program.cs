@@ -22,6 +22,7 @@ using Microsoft.Extensions.FileProviders;
 using ChattyBox.Services;
 using ChattyBox.Middleware;
 using ChattyBox.Database;
+using ChattyBox.Utils;
 
 var reqOrigin = "_reqOrigin";
 
@@ -136,6 +137,7 @@ builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSec
 builder.Services.AddHttpClient<WebServiceClient>();
 
 builder.Services.AddLocalization();
+builder.Services.AddSingleton<LoginAttemptHelper>();
 builder.Services.AddSingleton<LocalizationMiddleware>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();

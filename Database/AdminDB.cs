@@ -1,12 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using ChattyBox.Models;
 using ChattyBox.Context;
+using ChattyBox.Models.AdditionalModels;
 using Microsoft.AspNetCore.Identity;
 using MaxMind.GeoIP2;
 
 namespace ChattyBox.Database;
 
 public class AdminDB {
+  private readonly UserManager<User> _userManager;
+  public AdminDB(UserManager<User> userManager) {
+    _userManager = userManager;
+  }
 
   // Create
   async public Task<UserReport> CreateReport(ReportRequest reportRequest, string reportingUserId) {
@@ -94,5 +99,19 @@ public class AdminDB {
     report.ViolationFound = violationFound;
     await ctx.SaveChangesAsync();
     return report;
+  }
+
+  async public Task LockUserOut(string userId, LockoutInfo lockoutInfo) {
+    var user = await _userManager.FindByIdAsync(userId);
+    ArgumentNullException.ThrowIfNull(user);
+    if (!lockoutInfo.Lockout)
+      user.LockoutEnd = DateTimeOffset.MinValue;
+    else if (lockoutInfo.Permanent)
+      user.LockoutEnd = DateTimeOffset.MaxValue;
+    else
+      user.LockoutEnd = lockoutInfo.LockoutEnd;
+
+    user.LockoutReason = lockoutInfo.LockoutReason;
+    await _userManager.UpdateAsync(user);
   }
 }

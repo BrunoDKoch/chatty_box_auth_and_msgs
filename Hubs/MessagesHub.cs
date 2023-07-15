@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ChattyBox.Database;
 using ChattyBox.Misc;
 using ChattyBox.Models;
+using ChattyBox.Models.AdditionalModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Localization;
@@ -503,7 +504,6 @@ public class MessagesHub : Hub {
       }
       var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
       await _userManager.SetTwoFactorEnabledAsync(user, enable);
-      await Clients.Caller.SendAsync("currentMFAOptions", new { isEnabled = enable, providers }, default);
     });
   }
 

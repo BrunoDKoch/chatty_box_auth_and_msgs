@@ -4,7 +4,9 @@ using ChattyBox.Models;
 using ChattyBox.Context;
 using ChattyBox.Services;
 using ChattyBox.Database;
+using ChattyBox.Models.AdditionalModels;
 using ChattyBox.Hubs;
+using ChattyBox.Utils;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using MaxMind.GeoIP2;
@@ -21,170 +23,35 @@ namespace ChattyBox.Controllers;
 [Route("[controller]")]
 public class UserController : ControllerBase {
   public IPasswordHasher<User> hasher = new PasswordHasher<User>();
-  private readonly UserManager<User> _userManager;
   private readonly RoleManager<Role> _roleManager;
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
-  private readonly WebServiceClient _maxMindClient;
   private readonly IWebHostEnvironment _webHostEnvironment;
   private readonly IHubContext<MessagesHub> _hubContext;
   private readonly IStringLocalizer<UserController> _localizer;
   private readonly EmailService _emailService;
-  private readonly UserDB _userDb;
+  private readonly UserDB _userDB;
+  private readonly LoginAttemptHelper _loginAttemptHelper;
 
   public UserController(
-      UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
       SignInManager<User> signInManager,
-      WebServiceClient maxMindClient,
       IWebHostEnvironment webHostEnvironment,
       IHubContext<MessagesHub> hubContext,
       IStringLocalizer<UserController> localizer,
       EmailService emailService,
-      UserDB userDb) {
-    _userManager = userManager;
+      UserDB userDb,
+      LoginAttemptHelper loginAttemptHelper) {
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
-    _maxMindClient = maxMindClient;
     _webHostEnvironment = webHostEnvironment;
     _hubContext = hubContext;
     _localizer = localizer;
     _emailService = emailService;
-    _userDb = userDb;
-  }
-
-  static private string JoinThreeStrings(string string1, string string2, string string3, bool includesVersionNumber = false) {
-    var listOfStrings = new List<string> {
-      string1,
-      string2,
-    };
-    if (!string.IsNullOrEmpty(string3)) {
-      if (includesVersionNumber) listOfStrings[1] = $"{string2}.{string3}";
-      else listOfStrings.Add(string3);
-    }
-    return string.Join(' ', listOfStrings.Distinct());
-  }
-
-  async private Task<User> GetUser(string email) {
-    var user = await _userManager.FindByEmailAsync(email);
-    ArgumentNullException.ThrowIfNull(user);
-    return user;
-  }
-
-  async private Task<User> GetUser(HttpContext httpContext, bool getConnections = false) {
-    var user = getConnections ?
-      await _userManager.GetUserAsync(httpContext.User) :
-      await _userManager.Users
-        .Include(u => u.ClientConnections)
-        .FirstOrDefaultAsync(u => u.Id == httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
-    ArgumentNullException.ThrowIfNull(user);
-    return user;
-  }
-
-  async static private Task<bool> CheckLocation(string userId, UserLoginAttempt loginAttempt) {
-    using var ctx = new ChattyBoxContext();
-    var previousAttempts = await ctx.UserLoginAttempts.Where(l => l.UserId == userId).ToListAsync();
-    var suspiciousLocation = previousAttempts.Count > 0 && previousAttempts
-      .Any(
-        l =>
-          l.Success &&
-          DistanceService.CalculateDistance(l.Latitude, l.Longitude, loginAttempt.Latitude, loginAttempt.Longitude) > 1000
-      );
-    return suspiciousLocation;
-  }
-
-  async private Task<UserLoginAttempt> CreateLoginAttempt(string userId, HttpContext context) {
-    IPAddress ipAddress;
-    // TODO: when ready for deployment, remove if statement
-    if (HttpContext.Connection.RemoteIpAddress == null || new List<string> { "::1", "127.0.0.1" }.Contains(HttpContext.Connection.RemoteIpAddress.ToString())) {
-      ipAddress = IPAddress.Parse(_configuration.GetValue<string>("TestIP")!);
-    } else {
-      ipAddress = HttpContext.Connection.RemoteIpAddress;
-    }
-    var clientInfo = ParsingService.ParseContext(context);
-    var city = await _maxMindClient.CityAsync(ipAddress);
-    var loginAttempt = new UserLoginAttempt {
-      Id = Guid.NewGuid().ToString(),
-      UserId = userId,
-      IpAddress = ipAddress.ToString(),
-      CityName = city.City.Name ?? "unknown",
-      GeoNameId = city.City.GeoNameId is null ? "unknown" : city.City.GeoNameId.ToString()!,
-      CountryName = city.Country.Name ?? "unknown",
-      CountryIsoCode = city.Country.IsoCode ?? "unknown",
-      Latitude = (double)city.Location.Latitude!,
-      Longitude = (double)city.Location.Longitude!,
-      OS = JoinThreeStrings(clientInfo.OS.Family, clientInfo.OS.Major, clientInfo.OS.Minor, includesVersionNumber: true),
-      Device = JoinThreeStrings(clientInfo.Device.Brand, clientInfo.Device.Family, clientInfo.Device.Model),
-      Browser = JoinThreeStrings(clientInfo.UA.Family, clientInfo.UA.Major, clientInfo.UA.Minor, includesVersionNumber: true),
-    };
-    return loginAttempt;
-  }
-
-  async private Task<UserLoginAttempt?> VerifyLoginAttempt(UserLoginAttempt loginAttempt, User user, LogInInfo data, bool suspiciousLocation) {
-    // Handle login attempt from suspicious location
-    if (suspiciousLocation) {
-      var newLocationVerification = new Random().Next(100000, 999999).ToString();
-      var newLocationVerificationClaim = new Claim("NewLocation", newLocationVerification);
-      await _userManager.AddClaimAsync(user, newLocationVerificationClaim);
-      loginAttempt.Success = false;
-      return loginAttempt;
-    }
-    var signInSuccess = await _signInManager.PasswordSignInAsync(user, data.Password, data.Remember, user.AccessFailedCount > 4);
-    // Check if requires 2FA (will return false if device is remembered)
-    if (signInSuccess.RequiresTwoFactor) {
-      // If yes, but no code is given, return status 400
-      if (string.IsNullOrEmpty(data.MFACode)) return null;
-      signInSuccess = await _signInManager.TwoFactorAuthenticatorSignInAsync(data.MFACode, data.Remember, data.RememberMultiFactor);
-      await _userManager.ResetAccessFailedCountAsync(user);
-    }
-
-    loginAttempt.Success = signInSuccess.Succeeded;
-    return loginAttempt;
-  }
-
-  async private Task<LoginAttemptResult> HandleLoginAttempt(User user, LogInInfo data) {
-    var loginAttempt = await CreateLoginAttempt(user.Id, HttpContext);
-    ArgumentNullException.ThrowIfNull(loginAttempt);
-    var suspiciousLocation = await CheckLocation(user.Id, loginAttempt);
-    loginAttempt = await VerifyLoginAttempt(loginAttempt, user, data, suspiciousLocation);
-    if (loginAttempt is null) throw new MFACodeRequiredException("");
-
-    using var ctx = new ChattyBoxContext();
-    await ctx.UserLoginAttempts.AddAsync(loginAttempt);
-    await ctx.SaveChangesAsync();
-
-    string failureReason = $"Invalid credentials.\n{_localizer.GetString("401Auth").Value}";
-    // Tell the user if their account is locked out
-    if (await _userManager.IsLockedOutAsync(user)) {
-      string failureReasonStart;
-      if (user.LockoutEnd == DateTimeOffset.MaxValue) {
-        failureReasonStart = _localizer.GetString("PermanentSuspension").Value;
-      } else {
-        failureReasonStart = $"{_localizer.GetString("TemporarySuspension").Value} " +
-          $"{TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize(2)}";
-      }
-      string failureReasonEnd = $"{_localizer.GetString("Reasons")}: " +
-        string.Join(',', (
-          user.ReportsAgainstUser.Select(r => _localizer.GetString(r.ReportReason.Replace("report.", "").Pascalize()))
-          )
-        );
-
-      failureReason = $"{failureReasonStart}\n{failureReasonEnd}\n{_localizer.GetString("SupportMistake").Value}";
-    };
-    return new LoginAttemptResult { LoginAttempt = loginAttempt, FailureReason = failureReason, SuspiciousLocation = suspiciousLocation };
-  }
-
-  async private Task<bool> CheckIfEmailIsVerified(User user) {
-    var isVerified = await _userManager.IsEmailConfirmedAsync(user);
-    if (!isVerified) {
-      await RemoveOTPClaimFromUser(user);
-      var otpClaim = CreateOTPClaim();
-      await _userManager.AddClaimAsync(user, otpClaim);
-      await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: otpClaim.Value!);
-    }
-    return isVerified;
+    _userDB = userDb;
+    _loginAttemptHelper = loginAttemptHelper;
   }
 
   async private Task SendAvatarUpdateMessage(string userId, string avatar, IEnumerable<string> usersToNotify) {
@@ -193,48 +60,21 @@ public class UserController : ControllerBase {
       .SendAsync("newAvatar", new { userId, avatar }, default);
   }
 
-  static private void CheckFileSize(IFormFile file) {
-    if (file.Length.Bytes() > (20).Megabytes()) {
-      throw new InvalidOperationException($"file size {file.Length.Megabytes()} greater than 20MB");
+  async private Task<Microsoft.AspNetCore.Identity.SignInResult> AttemptSignIn(User user, LogInInfo logInInfo) {
+    var signInResult = await _signInManager.CheckPasswordSignInAsync(user, logInInfo.Password, logInInfo.Remember);
+    if (signInResult.RequiresTwoFactor && !string.IsNullOrEmpty(logInInfo.MFACode)) {
+      signInResult = await _signInManager.TwoFactorAuthenticatorSignInAsync(logInInfo.MFACode, logInInfo.Remember, logInInfo.RememberMultiFactor);
     }
-  }
-
-  static private Claim CreateOTPClaim() {
-    var otp = new Random().Next(100000, 999999).ToString();
-    var otpClaim = new Claim("OTP", otp);
-    return otpClaim;
-  }
-
-  async private Task RemoveOTPClaimFromUser(User user) {
-    var claims = await _userManager.GetClaimsAsync(user);
-    var claim = claims.FirstOrDefault(c => c.Type == "OTP");
-    ArgumentNullException.ThrowIfNull(claim);
-    await _userManager.RemoveClaimAsync(user, claim);
-  }
-
-  async static private Task<string> GetDefaultAvatar(User user) {
-    var uri = new Uri(
-      $"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random"
-    );
-    var filePath = await FileService.SaveImage(uri, user, isAvatar: true);
-    return filePath;
+    return signInResult;
   }
 
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
   async public Task<ActionResult<string?>> RegisterUser([FromBody] UserInitialData data) {
-    var createdUser = new UserCreate(data);
-    createdUser.Avatar = await GetDefaultAvatar(createdUser);
-    var result = await _userManager.CreateAsync(createdUser);
-    if (result.Errors.Any()) {
-      var duplicateErrors = result.Errors.Where(e => e.Code.ToLower().StartsWith("duplicate")).ToList();
-      if (duplicateErrors is null || duplicateErrors.Count == 0)
-        return Unauthorized(string.Join("\n", result.Errors.Select(e => e.Description)));
-      return Conflict(string.Join("\n", result.Errors.Select(e => e.Description)));
-    }
-    var otpClaim = CreateOTPClaim();
-    await _userManager.AddClaimAsync(createdUser, otpClaim);
+    var user = await _userDB.CreateUser(data);
+    var otpClaim = OTPClaimUtil.CreateOTPClaim("OTP");
+    await _userDB.AddClaim(user, otpClaim);
     await _emailService.SendEmail(data.Email, EmailType.EmailConfirmation, otpClaim.Value);
 
     return Ok();
@@ -243,138 +83,100 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPost("Login")]
   async public Task<IActionResult> LogInUser([FromBody] LogInInfo data) {
-    var user =
-      await _userManager.Users
-        .Include(u => u.ReportsAgainstUser)
-        .FirstOrDefaultAsync(u => u.Email == data.Email.Trim());
-    ArgumentNullException.ThrowIfNull(user);
+    var user = await _userDB.LogInUser(data);
+    var signInResult = await AttemptSignIn(user, data);
+    var loginAttempt = await _loginAttemptHelper.CreateLoginAttempt(user.Id, HttpContext);
+    var suspiciousLocation = UserDB.CheckLocation(user, loginAttempt);
 
-    // If email is not confirmed, re-send confirmation and prevent login
-    if (!await CheckIfEmailIsVerified(user)) {
-      throw new EmailConfirmationException();
+    if (suspiciousLocation || !signInResult.Succeeded) {
+      loginAttempt.Success = false;
+      if (signInResult.RequiresTwoFactor) throw new MFACodeRequiredException("");
+      if (suspiciousLocation) {
+        throw new SuspiciousLocationException(_localizer.GetString("403"));
+      }
+      throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
     }
-
-    var loginAttemptResult = await HandleLoginAttempt(user, data);
-    if (!loginAttemptResult.LoginAttempt.Success) {
-      await _userManager.AccessFailedAsync(user);
-
-      // Send 403 in case the login attempt comes from a suspicious location
-      if (loginAttemptResult.SuspiciousLocation) throw new SuspiciousLocationException(_localizer.GetString("403"));
-      throw new InvalidCredentialsException(loginAttemptResult.FailureReason);
-    };
-    await _userManager.ResetAccessFailedCountAsync(user);
+    if (!signInResult.Succeeded) throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
     return StatusCode(StatusCodes.Status302Found);
   }
 
   [HttpPut("Change/Email")]
   async public Task<ActionResult> ChangeEmail([FromBody] ChangeEmailRequest body) {
-    var user = await GetUser(HttpContext);
-    if (user.NormalizedEmail != body.CurrentEmail.ToUpper())
-      return Unauthorized();
-    var passwordIsValid = await _userManager.CheckPasswordAsync(user, body.Password);
-    if (!passwordIsValid) return Unauthorized();
-
-    // Generate a token for undoing this, and send it to old email
-    var token = await _userManager.GenerateChangeEmailTokenAsync(user, body.NewEmail);
-    await _emailService.SendEmail(user.Email!, EmailType.EmailChangedWarning, itemAndToken: $"?email={user.Email!}&token={token}");
-
-    // Then, set the new email
-    await _userManager.SetEmailAsync(user, body.NewEmail);
+    var token = await _userDB.ChangeEmail(body, HttpContext);
+    // Send undo token to old email
+    await _emailService.SendEmail(body.CurrentEmail, EmailType.EmailChangedWarning, itemAndToken: $"?email={body.CurrentEmail}&token={token}");
     return Ok();
   }
 
   [HttpPatch("Change/Email")]
   async public Task<RedirectResult> UndoChangeEmail([FromQuery] string email, [FromQuery] string token) {
-    var user = await GetUser(email);
-    await _userManager.ChangeEmailAsync(user, email, token);
-    await _userManager.UpdateSecurityStampAsync(user);
+    var user = await _userDB.UndoChangeEmail(email, token);
+    HttpContext.Abort();
     await _hubContext.Clients.User(user.Id).SendAsync("forceLogOut", default);
     return Redirect(_configuration.GetValue<string>("WebsiteUrl")!);
   }
 
   [HttpPut("Change/Password")]
   async public Task<ActionResult> ChangePassword([FromBody] ChangePasswordRequest body) {
-    var user = await GetUser(HttpContext);
-    var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
+    var result = await _userDB.ChangePassword(body, HttpContext);
     if (result.Succeeded) return Ok();
     return Unauthorized();
   }
 
   [HttpGet]
   async public Task<ActionResult<UserPersonalInfo>> GetUser() {
-    var user = await _userDb.GetUserPersonalInfo(HttpContext);
+    var user = await _userDB.GetUserPersonalInfo(HttpContext);
     return Ok(user);
   }
 
   [HttpHead("Logout")]
   async public Task<IActionResult> LogOut([FromQuery] bool invalidateAllSessions = false) {
-    var user = await GetUser(HttpContext);
+    await _userDB.SignOut(HttpContext, invalidateAllSessions);
     await _signInManager.SignOutAsync();
-    if (invalidateAllSessions) await _userManager.UpdateSecurityStampAsync(user);
     return SignOut();
   }
 
   [AllowAnonymous]
   [HttpGet("LoggedIn")]
-  async public Task<ActionResult<bool?>> CheckIfLoggedIn() {
-    try {
-      var userClaim = HttpContext.User;
-      ArgumentNullException.ThrowIfNull(userClaim);
-      if (_signInManager.IsSignedIn(userClaim)) return Ok(true);
-      var user = await _userManager.GetUserAsync(userClaim);
-      ArgumentNullException.ThrowIfNull(user);
-      await _signInManager.RefreshSignInAsync(user);
-      return Ok(_signInManager.IsSignedIn(userClaim));
-    } catch (Exception e) {
-      Console.Error.WriteLine(e);
-      return Unauthorized();
-    }
+  public ActionResult<bool?> CheckIfLoggedIn() {
+    return _signInManager.IsSignedIn(HttpContext.User);
   }
 
   [AllowAnonymous]
   [HttpPost("Validate/Email")]
   async public Task<IActionResult> ValidateEmail([FromBody] EmailValidationRequest request) {
-    try {
-      var user = await GetUser(request.Email);
-      var claims = await _userManager.GetClaimsAsync(user);
-      var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
-      var valid = otpClaim != null && otpClaim.Value == request.Code;
-      if (!valid) return Unauthorized("Invalid code");
-      user.EmailConfirmed = true;
-      await _signInManager.SignInAsync(user, false);
-      await _userManager.RemoveClaimAsync(user, user.UserClaims.First(u => u.ClaimType == "OTP").ToClaim());
-      return Ok();
-    } catch (Exception e) {
-      Console.ForegroundColor = ConsoleColor.Red;
-      Console.Error.WriteLine(e);
-      Console.ForegroundColor = ConsoleColor.Green;
-      return StatusCode(500);
-    }
+    var user = await _userDB.GetUser(request.Email);
+    var claims = await _userDB.GetClaims(user);
+    var otpClaim = claims.FirstOrDefault(u => u.Type == "OTP");
+    ArgumentNullException.ThrowIfNull(otpClaim);
+    var valid = otpClaim is not null && otpClaim.Value == request.Code;
+    if (!valid) throw new InvalidCredentialsException("Invalid code");
+    user.EmailConfirmed = true;
+    await _signInManager.SignInAsync(user, false);
+    await _userDB.RemoveClaim(user, otpClaim!);
+    return Ok();
   }
 
   // Verify location after alert
   [AllowAnonymous]
   [HttpPost("Validate/Location")]
   async public Task<IActionResult> ValidadeLocation([FromBody] LocationValidationRequest request) {
-    var user = await GetUser(request.Email);
-    var claims = await _userManager.GetClaimsAsync(user);
+    var user = await _userDB.GetUser(request.Email);
+    var claims = await _userDB.GetClaims(user);
     var newLocationVerificationClaim = claims.FirstOrDefault(u => u.Type == "NewLocation");
     var valid = newLocationVerificationClaim != null && newLocationVerificationClaim.Value == request.Code;
     if (!valid) return Unauthorized("Invalid code");
-    using var ctx = new ChattyBoxContext();
-    var loginAttempt = await ctx.UserLoginAttempts.OrderBy(l => l.AttemptedAt).FirstAsync(l => l.UserId == user.Id);
-    loginAttempt.Success = true;
-    await ctx.SaveChangesAsync();
+    await _userDB.UpdateLoginAttempt(user.Id);
     return Ok();
   }
 
   [AllowAnonymous]
   [HttpPost("Recovery")]
   async public Task<ActionResult<string>> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
-    var user = await GetUser(request.Email);
+    var user = await _userDB.GetUser(request.Email);
     ArgumentNullException.ThrowIfNull(user);
     // TODO: handle this via email
-    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+    var token = await _userDB.GeneratePasswordResetToken(user);
     await _emailService.SendEmail(
       user.Email!, EmailType.PasswordResetConfirmation, itemAndToken: $"?email={user.Email!}&token={token}"
     );
@@ -384,8 +186,8 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpPut("Recovery")]
   async public Task<ActionResult<string>> RecoverPassword([FromBody] PasswordResetRequest request) {
-    var user = await GetUser(request.Email);
-    var result = await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
+    var user = await _userDB.GetUser(request.Email);
+    var result = await _userDB.ResetPassword(user, request);
     if (!result.Succeeded) return Unauthorized();
     return Ok("Password reset");
   }
@@ -393,53 +195,34 @@ public class UserController : ControllerBase {
   // Handle MFA disabling
   [HttpPut("MFA/Disable")]
   async public Task<IActionResult> StartDisableMFA() {
-    var user = await GetUser(HttpContext);
-    if (!user.TwoFactorEnabled) throw new InvalidOperationException();
+    var user = await _userDB.GetUser(HttpContext);
     // This will force open a modal to get the user's credentials, which will then call the POST method
-    // TODO: inform user via email
+    if (!user.TwoFactorEnabled) throw new InvalidOperationException();
     await _emailService.SendEmail(user.Email!, EmailType.MFADisabledWarning);
     return Accepted();
   }
 
   [HttpPost("MFA/Disable")]
   async public Task<IActionResult> FinishDisableMFA([FromBody] MFADisableRequest request) {
-    var user = await GetUser(HttpContext);
-    var result = await _userManager.CheckPasswordAsync(user, request.Password);
-    if (!result) return Forbid();
-    var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
-    await _userManager.SetTwoFactorEnabledAsync(user, false);
-    await _hubContext.Clients.User(user.Id).SendAsync("currentMFAOptions", new { isEnabled = false, providers }, default);
+    await _userDB.ToggleMFA(request, HttpContext);
     return Ok();
   }
 
   // Images
   [HttpPost("Avatar")]
   async public Task<ActionResult<string>> SaveAvatar([FromForm] IFormFile file) {
-    CheckFileSize(file);
-    var user =
-      await _userManager.Users
-        .Include(u => u.Chats)
-        .FirstOrDefaultAsync(u => u.Id == HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
-    ArgumentNullException.ThrowIfNull(user);
-    var avatar = await FileService.SaveImage(file, user, isAvatar: true);
-    user.Avatar = avatar;
-    await _userManager.UpdateAsync(user);
-
-    var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
-    await SendAvatarUpdateMessage(user.Id, avatar, groupsToNotify);
+    FileService.CheckFileSize(file);
+    var avatarAndGroups = await _userDB.ChangeAvatar(file, HttpContext);
+    var userId = avatarAndGroups.Item1;
+    var avatar = avatarAndGroups.Item2;
+    var groupsToNotify = avatarAndGroups.Item3;
+    await SendAvatarUpdateMessage(userId, avatar, groupsToNotify);
     return Ok(avatar);
   }
 
   [HttpDelete("Avatar")]
   async public Task<IActionResult> DeleteAvatar() {
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    ArgumentNullException.ThrowIfNull(user);
-    ArgumentException.ThrowIfNullOrEmpty(user.Avatar);
-    FileService.DeleteFile(user.Avatar);
-
-    user.Avatar = await GetDefaultAvatar(user);
-    await _userManager.UpdateAsync(user);
-
+    var user = await _userDB.SetAvatarToDefault(HttpContext);
     var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
     await SendAvatarUpdateMessage(user.Id, avatar: String.Empty, groupsToNotify);
     return Ok();
@@ -447,9 +230,8 @@ public class UserController : ControllerBase {
 
   [HttpPost("Upload/{chatId}")]
   async public Task<ActionResult<ChatMessage>> UploadImage(string chatId, [FromForm] IFormFile file) {
-    CheckFileSize(file);
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    ArgumentNullException.ThrowIfNull(user);
+    FileService.CheckFileSize(file);
+    var user = await _userDB.GetUser(HttpContext);
     string filePath;
     if (file.ContentType.StartsWith("image")) {
       filePath = await FileService.SaveImage(file, user, chatId);
@@ -469,8 +251,7 @@ public class UserController : ControllerBase {
 
   [HttpDelete("Upload/{chatId}")]
   async public Task<ActionResult<ChatMessage>> RemoveImage(string chatId, [FromBody] FileDeletionRequest fileDeletionRequest) {
-    var user = await _userManager.GetUserAsync(HttpContext.User);
-    ArgumentNullException.ThrowIfNull(user);
+    var user = await _userDB.GetUser(HttpContext);
     if (!fileDeletionRequest.FilePath.Contains(chatId) || !fileDeletionRequest.FilePath.Contains(user.Id))
       throw new InvalidOperationException(_localizer.GetString("403"));
     FileService.DeleteFile(fileDeletionRequest.FilePath);
