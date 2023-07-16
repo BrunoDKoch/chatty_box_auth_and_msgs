@@ -248,7 +248,6 @@ public class UserController : ControllerBase {
     if (!fileDeletionRequest.FilePath.Contains(chatId) || !fileDeletionRequest.FilePath.Contains(user.Id))
       throw new InvalidOperationException(_localizer.GetString("403"));
     FileService.DeleteFile(fileDeletionRequest.FilePath);
-    await _hubContext.Clients.User(user.Id).SendAsync("fileRemoved", new { chatId, fileDeletionRequest.FilePath });
     return Ok(fileDeletionRequest.FilePath);
   }
 }

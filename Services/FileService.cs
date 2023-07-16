@@ -110,6 +110,7 @@ static public class FileService {
   }
 
   static public void DeleteFile(string filePath) {
+    if (!File.Exists(filePath)) return;
     File.Delete(filePath);
   }
 }
