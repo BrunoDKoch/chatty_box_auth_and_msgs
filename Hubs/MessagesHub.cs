@@ -1,10 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChattyBox.Database;
-using ChattyBox.Misc;
 using ChattyBox.Models;
 using ChattyBox.Models.AdditionalModels;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Localization;
 using Humanizer;
@@ -13,32 +10,16 @@ namespace ChattyBox.Hubs;
 
 [Authorize]
 public class MessagesHub : Hub {
-  private List<string> _validLetters = ValidCharacters.GetLetters().Split().ToList();
-
-  private readonly UserManager<User> _userManager;
-  private readonly RoleManager<Role> _roleManager;
-  private readonly IConfiguration _configuration;
-  private readonly SignInManager<User> _signInManager;
   private readonly IStringLocalizer<MessagesHub> _localizer;
-
   private readonly MessagesDB _messagesDB;
   private readonly UserDB _userDB;
   private readonly AdminDB _adminDB;
 
   public MessagesHub(
-      UserManager<User> userManager,
-      RoleManager<Role> roleManager,
-      IConfiguration configuration,
-      SignInManager<User> signInManager,
-      MaxMind.GeoIP2.WebServiceClient maxMindClient,
       IStringLocalizer<MessagesHub> localizer,
       UserDB userDB,
       MessagesDB messagesDB,
       AdminDB adminDB) {
-    _userManager = userManager;
-    _roleManager = roleManager;
-    _configuration = configuration;
-    _signInManager = signInManager;
     _userDB = userDB;
     _messagesDB = messagesDB;
     _adminDB = adminDB;
@@ -107,7 +88,7 @@ public class MessagesHub : Hub {
 
   async private Task HandleTyping(string fromId, string chatId, string connectionId, bool isTyping) {
     await HandleException(async () => {
-      var from = await _userManager.FindByIdAsync(fromId);
+      var from = await _userDB.GetUser(fromId);
       ArgumentNullException.ThrowIfNull(from);
       await Clients.GroupExcept(chatId, connectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
     });
@@ -120,17 +101,7 @@ public class MessagesHub : Hub {
         var httpContext = Context.GetHttpContext();
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, Context.ConnectionId, httpContext);
-        var user = await _userManager.Users
-          .Include(u => u.Roles)
-          .Include(u => u.Chats)
-          .AsSplitQuery()
-          .Include(u => u.Friends)
-            .ThenInclude(f => f.ClientConnections)
-          .AsSplitQuery()
-          .Include(u => u.IsFriendsWith)
-            .ThenInclude(f => f.ClientConnections)
-          .AsSplitQuery()
-          .FirstOrDefaultAsync(u => u.Id == id);
+        var user = await _userDB.GetCompleteUserInfo(id);
         ArgumentNullException.ThrowIfNull(user);
 
         // Add to admin group
@@ -175,8 +146,7 @@ public class MessagesHub : Hub {
   async public Task GetCallerInfo() {
     try {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
+      var user = await _userDB.GetUser(userId);
       await Clients.Caller.SendAsync("userInfo", new { user.UserName, user.Avatar }, default);
     } catch (ArgumentNullException) {
       return;
@@ -209,7 +179,7 @@ public class MessagesHub : Hub {
   }
 
   async public Task<bool> SendMessage(string chatId, string text, string? replyToId) {
-    return await HandleException<bool>(async () => {
+    return await HandleException(async () => {
       var fromId = Context.UserIdentifier;
       ArgumentException.ThrowIfNullOrEmpty(fromId);
       var message = await _messagesDB.CreateMessage(fromId, chatId, text, replyToId);
@@ -326,13 +296,7 @@ public class MessagesHub : Hub {
   async public Task RespondToFriendRequest(string addingId, bool accept) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager
-        .Users
-        .Include(u => u.ClientConnections
-          .Where(c => (bool)c.Active!)
-        )
-        .FirstOrDefaultAsync(u => u.Id == addingId);
-      ArgumentNullException.ThrowIfNull(user);
+      var user = await _userDB.GetAddingUser(addingId);
       var response = await _userDB.HandleFriendRequest(userId, addingId, accept);
       if (accept) {
         var connection = await _messagesDB.GetClientConnections(addingId);
@@ -455,8 +419,7 @@ public class MessagesHub : Hub {
   async public Task<string?> GetStatus() {
     return await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
+      var user = await _userDB.GetUser(userId);
       return user.Status;
     });
   }
@@ -473,37 +436,36 @@ public class MessagesHub : Hub {
   async public Task GetLoginAttempts(int page = 1) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var attempts = await _userDB.GetUserLoginAttempts(userId, page);
-      await Clients.Caller.SendAsync("loginAttempts", new { attempts = attempts.UserLoginAttempts, count = attempts.Count }, default);
+      var attemptsData = await _userDB.GetUserLoginAttempts(userId, page);
+      var attempts = attemptsData.UserLoginAttempts;
+      var count = attemptsData.Count;
+      await Clients.Caller.SendAsync("loginAttempts", new { attempts, count }, default);
     });
   }
 
   async public Task<bool> GetMFASettings() {
     return await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
-      var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+      var isEnabled = await _userDB.GetUserMFAEnabled(userId);
       return isEnabled;
     });
   }
 
   async public Task SetMFASettings(bool enable) {
     await HandleException(async () => {
+
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
-      await _userManager.ResetAuthenticatorKeyAsync(user);
+      var user = await _userDB.GetUser(userId);
+      
       if (enable) {
-        var key = await _userManager.GetAuthenticatorKeyAsync(user);
-        var results = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-        if (results == null) return;
-        var token = $"otpauth://totp/ChattyBox:{user.Email}?secret={key}";
-        var recoveryCodes = results.Where(r => r != token).ToArray();
+        var tokenAndRecoveryCodes = await _userDB.GenerateMFACodes(user);
+        var token = tokenAndRecoveryCodes.Item1;
+        ArgumentException.ThrowIfNullOrEmpty(token);
+        var recoveryCodes = tokenAndRecoveryCodes.Item2;
+        ArgumentNullException.ThrowIfNull(recoveryCodes);
         await Clients.Caller.SendAsync("mfaToken", new { token, recoveryCodes }, default);
       }
-      var providers = await _userManager.GetValidTwoFactorProvidersAsync(user);
-      await _userManager.SetTwoFactorEnabledAsync(user, enable);
+      await _userDB.ToggleMFA(user, enable);
     });
   }
 
@@ -519,15 +481,13 @@ public class MessagesHub : Hub {
   async public Task CloseConnection(List<string> ids) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
-      var relevantConnections = await _messagesDB.DeleteConnections(ids);
+      var user = await _userDB.GetUser(userId);
+      var relevantConnections = await _messagesDB.DeleteConnections(ids, user);
       ArgumentNullException.ThrowIfNull(relevantConnections);
       foreach (var relevantConnection in relevantConnections) {
         if ((bool)relevantConnection.Active!)
           await Clients.Client(relevantConnection.ConnectionId).SendAsync("forceLogOut");
       }
-      await _userManager.UpdateSecurityStampAsync(user);
     });
   }
 
@@ -535,10 +495,7 @@ public class MessagesHub : Hub {
   async public Task SetPrivacySettings(int privacyLevel) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
-      user.PrivacyLevel = privacyLevel;
-      await _userManager.UpdateAsync(user);
+      await _userDB.UpdatePrivateLevel(userId, privacyLevel);
       await Clients.Caller.SendAsync("privacyLevel", privacyLevel, default);
     });
   }
@@ -546,12 +503,7 @@ public class MessagesHub : Hub {
   async public Task GetPrivacySettings() {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user = await _userManager.FindByIdAsync(userId);
-      ArgumentNullException.ThrowIfNull(user);
-      if (user.PrivacyLevel == 0) {
-        user.PrivacyLevel = 1;
-        await _userManager.UpdateAsync(user);
-      }
+      var user = await _userDB.GetUser(userId);
       await Clients.Caller.SendAsync("privacyLevel", user.PrivacyLevel, default);
     });
   }
@@ -574,13 +526,7 @@ public class MessagesHub : Hub {
   async public Task ChangeUserName(string userName) {
     await HandleException(async () => {
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
-      var user =
-        await _userManager.Users
-        .Include(u => u.Chats)
-        .FirstOrDefaultAsync(u => u.Id == userId);
-      ArgumentNullException.ThrowIfNull(user);
-      user.UserName = userName;
-      await _userManager.UpdateAsync(user);
+      var user = await _userDB.ChangeUsername(userId, userName);
       await Clients.Caller.SendAsync("userName", user.UserName, default);
       var groups = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{userId}_friends" });
       await Clients.Groups(groups).SendAsync("newUserName", new { userId, userName }, default);
@@ -677,13 +623,7 @@ public class MessagesHub : Hub {
   async public Task UpdateReport(string id, bool violationFound) {
     await HandleException(async () => {
       await _adminDB.SetViolationFound(id, violationFound);
-      var admins = await _userManager.GetUsersInRoleAsync("admin");
-      var adminsAndOwner = (
-        await _userManager.GetUsersInRoleAsync("owner")
-      )
-        .Concat(admins)
-        .Select(a => a.Id)
-        .ToList();
+      var adminsAndOwner = await _adminDB.GetAdminIds();
       await Clients.Users(adminsAndOwner.AsReadOnly()).SendAsync("updateReport", new { id, violationFound }, default);
     });
   }

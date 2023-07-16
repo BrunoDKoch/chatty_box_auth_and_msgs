@@ -32,6 +32,7 @@ public class MessagesDB {
     _maxMindClient = maxMindClient;
   }
 
+  // ctx is passed from public methods to avoid memory leak
   async static private Task HandleMessageDeletion(ChattyBoxContext ctx, Message message) {
     var readMessage = await ctx.ReadMessages.Where(rm => rm.MessageId == message.Id).ToListAsync();
     ctx.ReadMessages.RemoveRange(readMessage);
@@ -468,6 +469,15 @@ public class MessagesDB {
     return true;
   }
 
+  async public Task<Message> DeleteMessageAsAdmin(string messageId) {
+    using var ctx = new ChattyBoxContext();
+    var message = await ctx.Messages.FirstOrDefaultAsync(m => m.Id == messageId);
+    ArgumentNullException.ThrowIfNull(message);
+    ctx.Remove(message);
+    await ctx.SaveChangesAsync();
+    return message;
+  }
+
   async public Task<ClientConnection> DeleteConnection(string connectionId) {
     using var ctx = new ChattyBoxContext();
     var connection = await ctx.ClientConnections.FirstOrDefaultAsync(c => c.ConnectionId == connectionId);
@@ -477,11 +487,12 @@ public class MessagesDB {
     return connection;
   }
 
-  async public Task<List<ClientConnection>> DeleteConnections(List<string> connectionIds) {
+  async public Task<List<ClientConnection>> DeleteConnections(List<string> connectionIds, User user) {
     using var ctx = new ChattyBoxContext();
     var relevantConnections = await ctx.ClientConnections.Where(c => connectionIds.Contains(c.Id)).ToListAsync();
     ctx.ClientConnections.RemoveRange(relevantConnections);
     await ctx.SaveChangesAsync();
+    await _userManager.UpdateSecurityStampAsync(user);
     return relevantConnections;
   }
 }

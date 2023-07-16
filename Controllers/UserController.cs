@@ -1,19 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using ChattyBox.Models;
-using ChattyBox.Context;
 using ChattyBox.Services;
 using ChattyBox.Database;
 using ChattyBox.Models.AdditionalModels;
 using ChattyBox.Hubs;
 using ChattyBox.Utils;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using MaxMind.GeoIP2;
-using System.Net;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
-using Humanizer;
 using Microsoft.Extensions.Localization;
 
 namespace ChattyBox.Controllers;
@@ -175,7 +169,6 @@ public class UserController : ControllerBase {
   async public Task<ActionResult<string>> GetPasswordToken([FromBody] PasswordRecoveryTokenRequest request) {
     var user = await _userDB.GetUser(request.Email);
     ArgumentNullException.ThrowIfNull(user);
-    // TODO: handle this via email
     var token = await _userDB.GeneratePasswordResetToken(user);
     await _emailService.SendEmail(
       user.Email!, EmailType.PasswordResetConfirmation, itemAndToken: $"?email={user.Email!}&token={token}"

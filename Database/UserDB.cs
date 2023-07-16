@@ -164,7 +164,7 @@ public class UserDB {
       await _emailService.SendEmail(user.Email!, EmailType.EmailConfirmation, otpCode: emailIsConfirmed.Item2!.Value!);
       throw new EmailConfirmationException();
     }
-    return user;    
+    return user;
   }
 
   async public Task<User> GetPreliminaryConnectionCallInfo(string userId) {
@@ -260,6 +260,17 @@ public class UserDB {
     return requests;
   }
 
+  async public Task<User> GetAddingUser(string addingId) {
+    var addingUser = await _userManager
+      .Users
+      .Include(u => u.ClientConnections
+        .Where(c => (bool)c.Active!)
+      )
+      .FirstOrDefaultAsync(u => u.Id == addingId);
+    ArgumentNullException.ThrowIfNull(addingUser);
+    return addingUser;
+  }
+
   async public Task<User?> GetSpecificUser(string userId) {
     return await _userManager.FindByIdAsync(userId);
   }
@@ -318,6 +329,20 @@ public class UserDB {
     return response;
   }
 
+  async public Task<User?> GetCompleteUserInfo(string id) {
+    return await _userManager.Users
+      .Include(u => u.Roles)
+      .Include(u => u.Chats)
+      .AsSplitQuery()
+      .Include(u => u.Friends)
+        .ThenInclude(f => f.ClientConnections)
+      .AsSplitQuery()
+      .Include(u => u.IsFriendsWith)
+        .ThenInclude(f => f.ClientConnections)
+      .AsSplitQuery()
+      .FirstOrDefaultAsync(u => u.Id == id);
+  }
+
   async public Task<UserPersonalInfo> GetUserPersonalInfo(HttpContext httpContext) {
     var userClaim = httpContext.User;
     ArgumentNullException.ThrowIfNull(userClaim);
@@ -349,9 +374,15 @@ public class UserDB {
         .ThenInclude(f => f.UserAdding)
         .AsSplitQuery()
       .Include(u => u.Roles)
+      .Include(u => u.Roles)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);
     return new UserPersonalInfo(user);
+  }
+
+  async public Task<bool> GetUserMFAEnabled(string userId) {
+    var user = await GetUser(userId);
+    return await _userManager.GetTwoFactorEnabledAsync(user);
   }
 
   // Update
@@ -361,7 +392,6 @@ public class UserDB {
 
   async public Task<string> ChangeEmail(ChangeEmailRequest body, HttpContext context) {
     var user = await GetUser(context);
-    var oldEmail = user.Email!;
     if (user.NormalizedEmail != body.CurrentEmail.ToUpper())
       throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
     var passwordIsValid = await _userManager.CheckPasswordAsync(user, body.Password);
@@ -384,7 +414,28 @@ public class UserDB {
     var result = await _userManager.CheckPasswordAsync(user, request.Password);
     if (!result) throw new ForbiddenException(_localizer.GetString("403"));
     var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+    await _userManager.ResetAuthenticatorKeyAsync(user);
     await _userManager.SetTwoFactorEnabledAsync(user, !isEnabled);
+  }
+
+  async public Task ToggleMFA(User user, bool enable) {
+    await _userManager.SetTwoFactorEnabledAsync(user, enable);
+  }
+
+  async public Task<(string?, string[]?)> GenerateMFACodes(User user) {
+    var key = await _userManager.GetAuthenticatorKeyAsync(user);
+    var results = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+    if (results is null) return (null, null);
+    var token = $"otpauth://totp/ChattyBox:{user.Email}?secret={key}";
+    var recoveryCodes = results.Where(r => r != token).ToArray();
+    return (token, recoveryCodes);
+  }
+
+  async public Task<User> UpdatePrivateLevel(string userId, int privacyLevel) {
+    var user = await GetUser(userId);
+    user.PrivacyLevel = privacyLevel;
+    await _userManager.UpdateAsync(user);
+    return user;
   }
 
   async public Task<User> SetAvatarToDefault(HttpContext context) {
@@ -534,5 +585,16 @@ public class UserDB {
     var claim = claims.FirstOrDefault(c => c.Type == claimName);
     ArgumentNullException.ThrowIfNull(claim);
     await _userManager.RemoveClaimAsync(user, claim);
+  }
+
+  async public Task<User> ChangeUsername(string userId, string userName) {
+    var user =
+      await _userManager.Users
+      .Include(u => u.Chats)
+      .FirstOrDefaultAsync(u => u.Id == userId);
+    ArgumentNullException.ThrowIfNull(user);
+    user.UserName = userName;
+    await _userManager.UpdateAsync(user);
+    return user;
   }
 }

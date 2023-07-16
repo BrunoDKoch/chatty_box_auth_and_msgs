@@ -100,3 +100,8 @@ public class PasswordResetRequest : PasswordRecoveryTokenRequest {
 public class MFADisableRequest {
   public string Password { get; set; } = null!;
 }
+
+public class SuspendedUsersList {
+  public List<ReportUserResponse> Users { get; set; } = null!;
+  public int Total;
+}
