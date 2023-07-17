@@ -135,6 +135,7 @@ if (builder.Environment.IsDevelopment()) {
 
 builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
 builder.Services.AddHttpClient<WebServiceClient>();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddLocalization();
 builder.Services.AddSingleton<LoginAttemptHelper>();
