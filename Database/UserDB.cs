@@ -148,6 +148,38 @@ public class UserDB {
     return (await _userManager.GetClaimsAsync(user)).ToList();
   }
 
+  async public Task<List<string>> GetRoles(string userId) {
+    using var ctx = new ChattyBoxContext();
+    return await ctx.Roles
+      .Include(r => r.Users)
+      .Where(r => r.Users.Any(u => u.Id == userId))
+      .Select(r => r.NormalizedName!)
+      .ToListAsync();
+  }
+
+  async public Task<string?> GetUserStatus(string userId) {
+    var user = await GetUser(userId);
+    return user.Status;
+  }
+
+  async public Task<List<string>> GetChatIds(string userId) {
+    using var ctx = new ChattyBoxContext();
+    var chatIds = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == userId)).Select(c => c.Id).ToListAsync();
+    return chatIds;
+  }
+
+  async public Task<List<UserIdAndConnections>> GetActiveFriendIds(string userId) {
+    var friendIdsAndConnections = await _userManager.Users
+      .Include(u => u.ClientConnections)
+      .Where(u => u.Friends.Any(f => f.Id == userId) || u.IsFriendsWith.Any(f => f.Id == userId))
+      .Select(u => new UserIdAndConnections {
+        Id = u.Id,
+        ConnectionIds = u.ClientConnections.Select(c => c.ConnectionId).ToList()
+      })
+      .ToListAsync();
+    return friendIdsAndConnections;
+  }
+
   async public Task<User> LogInUser(LogInInfo logInInfo) {
     var user =
       await _userManager.Users
@@ -373,7 +405,6 @@ public class UserDB {
       .Include(u => u.FriendRequestsReceived)
         .ThenInclude(f => f.UserAdding)
         .AsSplitQuery()
-      .Include(u => u.Roles)
       .Include(u => u.Roles)
       .FirstOrDefaultAsync(u => u.Id == userId);
     ArgumentNullException.ThrowIfNull(user);

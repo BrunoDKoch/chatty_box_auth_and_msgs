@@ -18,7 +18,7 @@ public class UserPartialResponse {
     Avatar = user.Avatar;
     IsBlocked = false;
     IsBlocking = false;
-    Status = user.Status ?? String.Empty;
+    Status = user.Status ?? string.Empty;
   }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
@@ -108,7 +108,7 @@ public class ReportUserResponse : UserPartialResponse {
   public List<ReportPartial> PastViolations;
   public string LockoutEnd;
   public ReportUserResponse(User user, IStringLocalizer<AdminController> localizer) : base(user) {
-    if (user.LockoutEnd is null) LockoutEnd = String.Empty;
+    if (user.LockoutEnd is null) LockoutEnd = string.Empty;
     else LockoutEnd = user.LockoutEnd == DateTimeOffset.MaxValue ?
       localizer.GetString("PermanentSuspension")! :
       $"{localizer.GetString("TemporarySuspension")} {TimeSpan.FromMinutes((DateTime.UtcNow - user.LockoutEnd!).Value.TotalMinutes).Humanize()}";
@@ -165,4 +165,9 @@ public class ClientConnectionPartialInfo {
     CreatedAt = connection.CreatedAt;
     IsCurrentSession = connection.ConnectionId == currentConnectionId;
   }
+}
+
+public class UserIdAndConnections {
+  public string Id { get; set; } = null!;
+  public List<string> ConnectionIds = new();
 }

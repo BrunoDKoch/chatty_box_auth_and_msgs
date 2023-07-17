@@ -91,6 +91,7 @@ public class UserController : ControllerBase {
       throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
     }
     if (!signInResult.Succeeded) throw new InvalidCredentialsException(_localizer.GetString("401Auth"));
+    await _signInManager.SignInAsync(user, data.Remember);
     return StatusCode(StatusCodes.Status302Found);
   }
 
@@ -123,7 +124,7 @@ public class UserController : ControllerBase {
     return Ok(user);
   }
 
-  [HttpHead("Logout")]
+  [HttpPost("Logout")]
   async public Task<IActionResult> LogOut([FromQuery] bool invalidateAllSessions = false) {
     await _userDB.SignOut(HttpContext, invalidateAllSessions);
     await _signInManager.SignOutAsync();
@@ -133,7 +134,7 @@ public class UserController : ControllerBase {
   [AllowAnonymous]
   [HttpGet("LoggedIn")]
   public ActionResult<bool?> CheckIfLoggedIn() {
-    return _signInManager.IsSignedIn(HttpContext.User);
+    return _signInManager.IsSignedIn(HttpContext.User) ? Ok() : Unauthorized();
   }
 
   [AllowAnonymous]
@@ -217,7 +218,7 @@ public class UserController : ControllerBase {
   async public Task<IActionResult> DeleteAvatar() {
     var user = await _userDB.SetAvatarToDefault(HttpContext);
     var groupsToNotify = user.Chats.Select(c => c.Id).Concat(new List<string> { $"{user.Id}_friends" });
-    await SendAvatarUpdateMessage(user.Id, avatar: String.Empty, groupsToNotify);
+    await SendAvatarUpdateMessage(user.Id, avatar: string.Empty, groupsToNotify);
     return Ok();
   }
 

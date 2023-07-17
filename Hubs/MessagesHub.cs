@@ -86,11 +86,11 @@ public class MessagesHub : Hub {
     }
   }
 
-  async private Task HandleTyping(string fromId, string chatId, string connectionId, bool isTyping) {
+  async private Task HandleTyping(string fromId, string chatId, bool isTyping) {
     await HandleException(async () => {
       var from = await _userDB.GetUser(fromId);
       ArgumentNullException.ThrowIfNull(from);
-      await Clients.GroupExcept(chatId, connectionId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
+      await Clients.OthersInGroup(chatId).SendAsync("typing", new { from = from.UserName, isTyping, chatId }, default);
     });
   }
 
@@ -101,28 +101,27 @@ public class MessagesHub : Hub {
         var httpContext = Context.GetHttpContext();
         ArgumentNullException.ThrowIfNull(httpContext);
         var userConnection = await _messagesDB.CreateConnection(id, Context.ConnectionId, httpContext);
-        var user = await _userDB.GetCompleteUserInfo(id);
-        ArgumentNullException.ThrowIfNull(user);
+        var chatIds = await _userDB.GetChatIds(id);
+        var roles = await _userDB.GetRoles(id);
+        var friendIdsAndConnections = await _userDB.GetActiveFriendIds(id);
 
         // Add to admin group
-        if (user.Roles.Any() && user.Roles.Any(r => r.NormalizedName == "ADMIN" || r.NormalizedName == "OWNER"))
+        if (roles.Any() && roles.Any(r => r == "ADMIN" || r == "OWNER"))
           await Groups.AddToGroupAsync(Context.ConnectionId, "admins", default);
 
         // Add to chats
-        foreach (var chat in user.Chats) {
-          await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id, default);
+        foreach (var chatId in chatIds) {
+          await Groups.AddToGroupAsync(Context.ConnectionId, chatId, default);
         }
 
         // Add to friend groups
-        var friends =
-          user.Friends.Concat(user.IsFriendsWith).ToList();
-        foreach (var friend in friends) {
-          if (friend.ClientConnections.Count == 0) continue;
-          await AddToFriendsGroup(id, friend.ClientConnections.Select(c => c.ConnectionId).ToList());
+        foreach (var friend in friendIdsAndConnections) {
           await AddToFriendsGroup(friend.Id, new List<string> { Context.ConnectionId });
+          await AddToFriendsGroup(id, friend.ConnectionIds);
         }
+
         // Inform friends of connection
-        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status = user.Status, online = true }, default);
+        await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status = await _userDB.GetUserStatus(id), online = true }, default);
 
         await Clients.Caller.SendAsync("connectionSuccessful", default);
       },
@@ -137,7 +136,7 @@ public class MessagesHub : Hub {
       }
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
       await _messagesDB.MarkConnectionAsInactive(userId, Context.ConnectionId);
-      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = String.Empty, online = false }, default);
+      await Clients.Group($"{userId}_friends").SendAsync("updateStatus", new { id = userId, status = string.Empty, online = false }, default);
     },
       async () => await base.OnDisconnectedAsync(exception)
     );
@@ -166,7 +165,7 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var fromId = Context.UserIdentifier;
       ArgumentException.ThrowIfNullOrEmpty(fromId);
-      await HandleTyping(fromId, chatId, Context.ConnectionId, true);
+      await HandleTyping(fromId, chatId, true);
     });
   }
 
@@ -174,7 +173,7 @@ public class MessagesHub : Hub {
     await HandleException(async () => {
       var fromId = Context.UserIdentifier;
       ArgumentException.ThrowIfNullOrEmpty(fromId);
-      await HandleTyping(fromId, chatId, Context.ConnectionId, false);
+      await HandleTyping(fromId, chatId, false);
     });
   }
 
