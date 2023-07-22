@@ -9,6 +9,9 @@ using ChattyBox.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
+using System.Security.Claims;
 
 namespace ChattyBox.Controllers;
 
@@ -27,6 +30,7 @@ public class UserController : ControllerBase {
   private readonly UserDB _userDB;
   private readonly LoginAttemptHelper _loginAttemptHelper;
   private readonly FileService _fileService;
+  private readonly CachingService _cachingService;
 
   public UserController(
       RoleManager<Role> roleManager,
@@ -38,7 +42,8 @@ public class UserController : ControllerBase {
       EmailService emailService,
       UserDB userDb,
       LoginAttemptHelper loginAttemptHelper,
-      FileService fileService) {
+      FileService fileService,
+      CachingService cachingService) {
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
@@ -49,6 +54,7 @@ public class UserController : ControllerBase {
     _userDB = userDb;
     _loginAttemptHelper = loginAttemptHelper;
     _fileService = fileService;
+    _cachingService = cachingService;
   }
 
   async private Task SendAvatarUpdateMessage(string userId, string avatar, IEnumerable<string> usersToNotify) {
@@ -64,6 +70,8 @@ public class UserController : ControllerBase {
     }
     return signInResult;
   }
+
+  
 
   // Auth
   [AllowAnonymous]
@@ -123,7 +131,13 @@ public class UserController : ControllerBase {
 
   [HttpGet]
   async public Task<ActionResult<UserPersonalInfo>> GetUser() {
-    var user = await _userDB.GetUserPersonalInfo(HttpContext);
+    /*ArgumentNullException.ThrowIfNull(HttpContext.User);
+    var id = HttpContext.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
+    ArgumentNullException.ThrowIfNull(id);
+    var cachedUser = await _cachingService.GetCache<UserPersonalInfo>(id.Value);
+    if (cachedUser is not null) return Ok(cachedUser);*/
+    UserPersonalInfo user = await _userDB.GetUserPersonalInfo(HttpContext);
+    //await _cachingService.SetCache(user.Id, user);
     return Ok(user);
   }
 

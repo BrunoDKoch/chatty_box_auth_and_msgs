@@ -110,15 +110,18 @@ public class MessagesHub : Hub {
           await Groups.AddToGroupAsync(Context.ConnectionId, "admins", default);
 
         // Add to chats
-        foreach (var chatId in chatIds) {
-          await Groups.AddToGroupAsync(Context.ConnectionId, chatId, default);
-        }
+        if (chatIds.Any())
+          foreach (var chatId in chatIds) {
+            await Groups.AddToGroupAsync(Context.ConnectionId, chatId, default);
+          }
 
         // Add to friend groups
-        foreach (var friend in friendIdsAndConnections) {
-          await AddToFriendsGroup(friend.Id, new List<string> { Context.ConnectionId });
-          await AddToFriendsGroup(id, friend.ConnectionIds);
-        }
+        if (friendIdsAndConnections.Any())
+          foreach (var friend in friendIdsAndConnections) {
+            await AddToFriendsGroup(friend.Id, new List<string> { Context.ConnectionId });
+            if (friend.ConnectionIds.Count == 0) continue;
+            await AddToFriendsGroup(id, friend.ConnectionIds);
+          }
 
         // Inform friends of connection
         await Clients.Group($"{id}_friends").SendAsync("updateStatus", new { id, status = await _userDB.GetUserStatus(id), online = true }, default);
@@ -455,7 +458,7 @@ public class MessagesHub : Hub {
 
       var userId = EnsureUserIdNotNull(Context.UserIdentifier);
       var user = await _userDB.GetUser(userId);
-      
+
       if (enable) {
         var tokenAndRecoveryCodes = await _userDB.GenerateMFACodes(user);
         var token = tokenAndRecoveryCodes.Item1;

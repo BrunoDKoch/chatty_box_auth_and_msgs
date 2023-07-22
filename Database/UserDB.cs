@@ -174,10 +174,10 @@ public class UserDB {
   async public Task<List<UserIdAndConnections>> GetActiveFriendIds(string userId) {
     var friendIdsAndConnections = await _userManager.Users
       .Include(u => u.ClientConnections)
-      .Where(u => u.Friends.Any(f => f.Id == userId) || u.IsFriendsWith.Any(f => f.Id == userId))
+      .Where(u => u.Friends.Any(f => f.Id == userId || u.IsFriendsWith.Any(f => f.Id == userId)))
       .Select(u => new UserIdAndConnections {
         Id = u.Id,
-        ConnectionIds = u.ClientConnections.Select(c => c.ConnectionId).ToList()
+        ConnectionIds = u.ClientConnections.Where(c => c.Active != null && (bool)c.Active!).Select(c => c.ConnectionId).ToList() ?? new List<string>()
       })
       .ToListAsync();
     return friendIdsAndConnections;

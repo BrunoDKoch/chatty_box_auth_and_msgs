@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace ChattyBox.Models.AdditionalModels;
 
 public class CompleteChatResponse {
@@ -26,6 +28,20 @@ public class CompleteChatResponse {
     SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = chat.Messages.Count;
+  }
+  public CompleteChatResponse(Chat chat, string mainUserId, int messageCount) {
+    Id = chat.Id;
+    IsGroupChat = chat.IsGroupChat;
+    MaxUsers = chat.MaxUsers;
+    ChatName = chat.ChatName;
+    CreatedAt = chat.CreatedAt;
+    UserIsAdmin = chat.Admins.Any(a => a.Id == mainUserId);
+    Admins = chat.Admins.Select(a => new UserPartialResponse(a, mainUserId)).ToList();
+    Users = chat.Users.Select(u => new UserPartialResponse(u, mainUserId)).ToList();
+    Messages = chat.Messages.Select(m => new ChatMessage(m, mainUserId)).ToList();
+    SystemMessages = chat.SystemMessages.Select(sm => new SystemMessagePartial(sm)).ToList();
+    AdminIds = chat.Admins.Select(a => a.Id).ToList();
+    MessageCount = messageCount;
   }
   public CompleteChatResponse(Chat chat, List<ChatMessage> messages) {
     Id = chat.Id;
@@ -67,6 +83,9 @@ public class CompleteChatResponse {
     AdminIds = chat.Admins.Select(a => a.Id).ToList();
     MessageCount = messageCount;
   }
+
+  [JsonConstructor]
+  public CompleteChatResponse() { }
 }
 
 public class ChatBasicInfo {
@@ -124,4 +143,7 @@ public class ChatPreview {
     ShowOSNotification = null;
     PlaySound = null;
   }
+
+  [JsonConstructor]
+  public ChatPreview() { }
 }

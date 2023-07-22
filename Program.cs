@@ -15,11 +15,13 @@ using SixLabors.ImageSharp.Web.Caching;
 using SixLabors.ImageSharp.Web.Caching.AWS;
 using Microsoft.IdentityModel.Logging;
 using System.Net.Mime;
-using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.AspNetCore.SignalR.StackExchangeRedis;
 using Microsoft.AspNetCore.Localization;
 using ChattyBox.Localization;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
 using ChattyBox.Services;
 using ChattyBox.Middleware;
 using ChattyBox.Database;
@@ -39,6 +41,7 @@ var BucketName = AWSConfig.GetValue<string>("BucketName")!;
 var AccessKey = AWSConfig.GetValue<string>("AccessKey")!;
 var AccessSecret = AWSConfig.GetValue<string>("AccessSecret")!;
 var Region = AWSConfig.GetValue<string>("Region")!;
+var redisKey = builder.Configuration.GetValue<string>("Redis")!;
 
 if (builder.Environment.IsDevelopment()) {
   builder.Configuration.AddJsonFile("appsettings.Development.json");
@@ -68,7 +71,12 @@ builder.Services.AddSignalR().AddJsonProtocol(o => {
   o.PayloadSerializerOptions.IgnoreReadOnlyProperties = false;
   o.PayloadSerializerOptions.IgnoreReadOnlyFields = false;
   o.PayloadSerializerOptions.IncludeFields = true;
-});
+})
+  .AddStackExchangeRedis(redisKey, options => {
+    options.Configuration.ChannelPrefix = "ChattyBox";
+    options.Configuration.AbortOnConnectFail = false;
+    options.Configuration.AllowAdmin = true;
+  });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -149,12 +157,14 @@ if (builder.Environment.IsDevelopment()) {
 
 builder.Services.Configure<WebServiceClientOptions>(builder.Configuration.GetSection("MaxMind"));
 builder.Services.AddHttpClient<WebServiceClient>();
-builder.Services.AddMemoryCache();
+builder.Services.AddStackExchangeRedisCache(options => {
+  options.Configuration = builder.Configuration.GetValue<string>("Redis");
+});
 
 builder.Services.AddLocalization();
+builder.Services.AddSingleton<CachingService>();
 builder.Services.AddSingleton<LoginAttemptHelper>();
 builder.Services.AddSingleton<LocalizationMiddleware>();
-builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IStringLocalizerFactory, JsonStringLocalizerFactory>();
 builder.Services.AddScoped<UserDB>();
 builder.Services.AddScoped<MessagesDB>();

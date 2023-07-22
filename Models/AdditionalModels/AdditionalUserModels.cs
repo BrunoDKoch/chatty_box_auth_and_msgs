@@ -1,6 +1,7 @@
 using Humanizer;
 using Microsoft.Extensions.Localization;
 using ChattyBox.Controllers;
+using Newtonsoft.Json;
 
 namespace ChattyBox.Models.AdditionalModels;
 public class UserPartialResponse {
@@ -20,6 +21,9 @@ public class UserPartialResponse {
     IsBlocking = false;
     Status = user.Status ?? string.Empty;
   }
+
+  [JsonConstructor]
+  public UserPartialResponse() { }
   public string Id { get; set; } = null!;
   public string UserName { get; set; } = null!;
   public string? Avatar { get; set; } = null!;
@@ -78,6 +82,9 @@ public class UserPersonalInfo : UserPartialResponse {
     Blocks = user.Blocking.Select(b => new UserPartialResponse(b)).ToList();
     IsAdmin = user.Roles.Any(r => r.NormalizedName == "OWNER" || r.NormalizedName == "ADMIN");
   }
+
+  [JsonConstructor]
+  public UserPersonalInfo() { }
 }
 
 public class FriendResponse : UserPartialResponse {
@@ -87,14 +94,22 @@ public class FriendResponse : UserPartialResponse {
   public FriendResponse(User user, string requestingUserId) : base(user, requestingUserId) {
     IsOnline = user.ClientConnections.Any(c => (bool)c.Active!);
   }
+
+  [JsonConstructor]
+  public FriendResponse() {
+
+  }
   public bool IsOnline { get; set; }
 }
 
 public class ReadMessagePartialResponse : UserPartialResponse {
+  public DateTime ReadAt;
   public ReadMessagePartialResponse(User user, DateTime readAt) : base(user) {
     ReadAt = readAt;
   }
-  public DateTime ReadAt;
+
+  [JsonConstructor]
+  public ReadMessagePartialResponse() { }
 }
 
 public class UserConnectionCallInfo : UserPersonalInfo {

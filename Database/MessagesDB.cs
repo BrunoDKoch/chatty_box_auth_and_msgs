@@ -18,18 +18,20 @@ public class MessagesDB {
   private readonly IConfiguration _configuration;
   private readonly SignInManager<User> _signInManager;
   private readonly WebServiceClient _maxMindClient;
-
+  private readonly CachingService _cachingService;
   public MessagesDB(
       UserManager<User> userManager,
       RoleManager<Role> roleManager,
       IConfiguration configuration,
       SignInManager<User> signInManager,
-      WebServiceClient maxMindClient) {
+      WebServiceClient maxMindClient,
+      CachingService cachingService) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
     _maxMindClient = maxMindClient;
+    _cachingService = cachingService;
   }
 
   // ctx is passed from public methods to avoid memory leak
@@ -135,6 +137,7 @@ public class MessagesDB {
     await ctx.Messages.AddAsync(newMessage);
     var user = await ctx.Users.FirstAsync(u => u.Id == fromId);
     await ctx.SaveChangesAsync();
+    await _cachingService.DeleteKey($"{chatId}_messages_skip=0");
     return new ChatMessage(newMessage, fromId);
   }
 

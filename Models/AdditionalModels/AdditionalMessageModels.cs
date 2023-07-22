@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace ChattyBox.Models.AdditionalModels;
 
 public class MessagePreview {
@@ -29,6 +31,9 @@ public class ChatMessage {
     ReadBy = message.ReadBy.Select(r => new ReadMessagePartialResponse(r.ReadBy, r.ReadAt)).ToList();
     User = new UserPartialResponse(message.From);
   }
+
+  [JsonConstructor]
+  public ChatMessage() { }
 }
 
 public class MessagesSearchResults {
@@ -51,6 +56,9 @@ public class SystemMessagePartial {
     AffectedUser = systemMessage.AffectedUser != null ? new UserPartialResponse(systemMessage.AffectedUser) : null;
     EventType = systemMessage.EventType;
   }
+
+  [JsonConstructor]
+  public SystemMessagePartial() { }
 }
 
 public class MessageReadInformationResponse {
