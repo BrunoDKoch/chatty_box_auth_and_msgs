@@ -12,6 +12,7 @@ using SixLabors.ImageSharp.Web.DependencyInjection;
 using SixLabors.ImageSharp.Web.Providers;
 using SixLabors.ImageSharp.Web.Providers.AWS;
 using SixLabors.ImageSharp.Web.Caching;
+using SixLabors.ImageSharp.Web.Caching.AWS;
 using Microsoft.IdentityModel.Logging;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Diagnostics;
@@ -23,12 +24,21 @@ using ChattyBox.Services;
 using ChattyBox.Middleware;
 using ChattyBox.Database;
 using ChattyBox.Utils;
+using Amazon.S3;
+using Microsoft.AspNetCore.Rewrite;
 
 var reqOrigin = "_reqOrigin";
 
 var allowedLetters = ValidCharacters.GetLetters();
 
 var builder = WebApplication.CreateBuilder(args);
+
+var AWSConfig = builder.Configuration.GetSection("AWS");
+var Endpoint = AWSConfig.GetValue<string>("Endpoint")!;
+var BucketName = AWSConfig.GetValue<string>("BucketName")!;
+var AccessKey = AWSConfig.GetValue<string>("AccessKey")!;
+var AccessSecret = AWSConfig.GetValue<string>("AccessSecret")!;
+var Region = AWSConfig.GetValue<string>("Region")!;
 
 if (builder.Environment.IsDevelopment()) {
   builder.Configuration.AddJsonFile("appsettings.Development.json");
@@ -114,13 +124,8 @@ if (builder.Environment.IsDevelopment()) {
     })
     .AddProvider<PhysicalFileSystemProvider>();
 } else {
-  var AWSConfig = builder.Configuration.GetSection("AWS");
-  var Endpoint = AWSConfig.GetValue<string>("Endpoint")!;
-  var BucketName = AWSConfig.GetValue<string>("BucketName")!;
-  var AccessKey = AWSConfig.GetValue<string>("AccessKey")!;
-  var AccessSecret = AWSConfig.GetValue<string>("AccessSecret")!;
-  var Region = AWSConfig.GetValue<string>("Region")!;
   builder.Services.AddImageSharp()
+    .ClearProviders()
     .Configure<AWSS3StorageImageProviderOptions>(options => {
       options.S3Buckets.Add(new AWSS3BucketClientOptions {
         Endpoint = Endpoint,
@@ -130,6 +135,15 @@ if (builder.Environment.IsDevelopment()) {
         Region = Region
       });
     })
+    .Configure<AWSS3StorageCacheOptions>(options => {
+      options.Endpoint = Endpoint;
+      options.BucketName = BucketName;
+      options.AccessKey = AccessKey;
+      options.AccessSecret = AccessSecret;
+      options.Region = Region;
+      AWSS3StorageCache.CreateIfNotExists(options, S3CannedACL.Private);
+    })
+    .SetCache<AWSS3StorageCache>()
     .AddProvider<AWSS3StorageImageProvider>();
 }
 
@@ -147,6 +161,8 @@ builder.Services.AddScoped<MessagesDB>();
 builder.Services.AddScoped<AdminDB>();
 builder.Services.AddTransient<ErrorHandlerMiddleware>();
 builder.Services.AddSingleton<EmailService>();
+builder.Services.AddSingleton<AmazonUploadService>();
+builder.Services.AddSingleton<FileService>();
 
 builder.Services.AddRateLimiter(options => {
   options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -161,6 +177,10 @@ if (app.Environment.IsDevelopment()) {
   app.UseSwagger();
   app.UseSwaggerUI();
   IdentityModelEventSource.ShowPII = true;
+} else {
+  var rewriter = new RewriteOptions()
+    .AddRewrite(@"^static/images/(.*)/(.*)/(.*)", $"{BucketName}/static/images/$1/$2/$3", false);
+  app.UseRewriter(rewriter);
 }
 
 app.UseHsts();
@@ -196,10 +216,14 @@ app.UseAuthorization();
 
 app.UseImageSharp();
 
-app.UseStaticFiles(new StaticFileOptions {
-  FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "static")),
-  RequestPath = "/static"
-});
+if (app.Environment.IsDevelopment()) {
+  app.UseStaticFiles(new StaticFileOptions {
+    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "static")),
+    RequestPath = "/static"
+  });
+} else {
+  
+}
 
 app.MapControllers();
 

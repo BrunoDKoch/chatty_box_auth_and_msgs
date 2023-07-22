@@ -1,6 +1,8 @@
 using ChattyBox.Models;
 using ChattyBox.Models.AdditionalModels;
 using Humanizer;
+using Amazon.S3;
+using Amazon.S3.Transfer;
 namespace ChattyBox.Services;
 
 public enum FileType {
@@ -10,7 +12,12 @@ public enum FileType {
   Other,
 }
 
-static public class FileService {
+public class FileService {
+  private readonly string? _environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+  private readonly AmazonUploadService _amazonUploadService;
+  public FileService(AmazonUploadService amazonUploadService) {
+    _amazonUploadService = amazonUploadService;
+  }
   static private string GetFilesDirectory(FileType fileType) {
     string fileDirectory = fileType switch {
       FileType.Image => "images",
@@ -45,32 +52,40 @@ static public class FileService {
     if (fileType != FileType.Image) return file.FileName;
     return isAvatar ? $"avatar.{Path.GetExtension(file.FileName)}" : file.FileName;
   }
-  async static public Task<string> SaveFile(IFormFile file, string chatId, string userId, FileType fileType) {
+
+  async public Task<string> SaveFile(IFormFile file, string chatId, string userId, FileType fileType) {
     var fileName = GetFileName(fileType, file);
     var filePath = GetFilePath(fileName, fileType, chatId, userId);
-    
+    if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT")
+      return await _amazonUploadService.UploadFile(file, filePath);
+
     using var stream = new FileStream(filePath, FileMode.Create);
     await file.CopyToAsync(stream);
     return filePath;
   }
 
-  static public async Task<string> SaveImage(IFormFile file, User user, bool isAvatar = false) {
+  public async Task<string> SaveImage(IFormFile file, User user, bool isAvatar = false) {
     var fileName = GetFileName(FileType.Image, file, isAvatar: isAvatar);
     var filePath = GetFilePath(fileName, FileType.Image, user.Id, isAvatar ? "avatar" : "images");
-
+    if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT")
+      return await _amazonUploadService.UploadFile(file, filePath);
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
     return filePath;
   }
 
-  static public async Task<string> SaveImage(IFormFile file, User user, string chatId) {
+  public async Task<string> SaveImage(IFormFile file, User user, string chatId) {
     var fileName = GetFileName(FileType.Image, file);
     var filePath = GetFilePath(fileName, FileType.Image, chatId, user.Id);
 
-    using var image = await Image.LoadAsync(file.OpenReadStream());
-    using var stream = new FileStream(filePath, FileMode.Create);
-    await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
+    if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT") {
+      return await _amazonUploadService.UploadFile(file, filePath);
+    } else {
+      using var image = await Image.LoadAsync(file.OpenReadStream());
+      using var stream = new FileStream(filePath, FileMode.Create);
+      await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
+    }
     return filePath;
   }
 
@@ -84,7 +99,7 @@ static public class FileService {
     var uri = new Uri(
       $"https://ui-avatars.com/api/?name={user.UserName}&background=random&size=150&bold=true&format=png&color=random"
     );
-    var filePath = await FileService.SaveImage(uri, user, isAvatar: true);
+    var filePath = await SaveImage(uri, user, isAvatar: true);
     return filePath;
   }
 
@@ -109,7 +124,11 @@ static public class FileService {
     return image;
   }
 
-  static public void DeleteFile(string filePath) {
+  async public Task DeleteFile(string filePath) {
+    if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT") {
+      await _amazonUploadService.DeleteFile(filePath);
+      return;
+    }
     if (!File.Exists(filePath)) return;
     File.Delete(filePath);
   }

@@ -26,6 +26,7 @@ public class UserController : ControllerBase {
   private readonly EmailService _emailService;
   private readonly UserDB _userDB;
   private readonly LoginAttemptHelper _loginAttemptHelper;
+  private readonly FileService _fileService;
 
   public UserController(
       RoleManager<Role> roleManager,
@@ -36,7 +37,8 @@ public class UserController : ControllerBase {
       IStringLocalizer<UserController> localizer,
       EmailService emailService,
       UserDB userDb,
-      LoginAttemptHelper loginAttemptHelper) {
+      LoginAttemptHelper loginAttemptHelper,
+      FileService fileService) {
     _roleManager = roleManager;
     _configuration = configuration;
     _signInManager = signInManager;
@@ -46,6 +48,7 @@ public class UserController : ControllerBase {
     _emailService = emailService;
     _userDB = userDb;
     _loginAttemptHelper = loginAttemptHelper;
+    _fileService = fileService;
   }
 
   async private Task SendAvatarUpdateMessage(string userId, string avatar, IEnumerable<string> usersToNotify) {
@@ -228,16 +231,16 @@ public class UserController : ControllerBase {
     var user = await _userDB.GetUser(HttpContext);
     string filePath;
     if (file.ContentType.StartsWith("image")) {
-      filePath = await FileService.SaveImage(file, user, chatId);
+      filePath = await _fileService.SaveImage(file, user, chatId);
     } else if (file.ContentType.StartsWith("video") || file.ContentType.StartsWith("audio")) {
-      filePath = await FileService.SaveFile(
+      filePath = await _fileService.SaveFile(
         file,
         chatId,
         user.Id,
         file.ContentType.StartsWith("image") ? FileType.Audio : FileType.Video
       );
     } else {
-      filePath = await FileService.SaveFile(file, chatId, user.Id, FileType.Other);
+      filePath = await _fileService.SaveFile(file, chatId, user.Id, FileType.Other);
     }
     await _hubContext.Clients.User(user.Id).SendAsync("fileAdded", new { chatId, filePath });
     return Ok(filePath);
@@ -248,7 +251,7 @@ public class UserController : ControllerBase {
     var user = await _userDB.GetUser(HttpContext);
     if (!fileDeletionRequest.FilePath.Contains(chatId) || !fileDeletionRequest.FilePath.Contains(user.Id))
       throw new InvalidOperationException(_localizer.GetString("403"));
-    FileService.DeleteFile(fileDeletionRequest.FilePath);
+    await _fileService.DeleteFile(fileDeletionRequest.FilePath);
     return Ok(fileDeletionRequest.FilePath);
   }
 }

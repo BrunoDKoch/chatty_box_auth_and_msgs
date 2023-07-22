@@ -19,6 +19,7 @@ public class UserDB {
   private readonly EmailService _emailService;
   private readonly LoginAttemptHelper _loginAttemptHelper;
   private readonly IStringLocalizer<UserDB> _localizer;
+  private readonly FileService _fileService;
 
   public UserDB(
       UserManager<User> userManager,
@@ -26,13 +27,15 @@ public class UserDB {
       IConfiguration configuration,
       EmailService emailService,
       IStringLocalizer<UserDB> localizer,
-      LoginAttemptHelper loginAttemptHelper) {
+      LoginAttemptHelper loginAttemptHelper,
+      FileService fileService) {
     _userManager = userManager;
     _roleManager = roleManager;
     _configuration = configuration;
     _emailService = emailService;
     _localizer = localizer;
     _loginAttemptHelper = loginAttemptHelper;
+    _fileService = fileService;
   }
 
   static private User EnsureUserIsNotNull(User? user) {
@@ -472,7 +475,7 @@ public class UserDB {
   async public Task<User> SetAvatarToDefault(HttpContext context) {
     var user = await GetUser(context);
     ArgumentException.ThrowIfNullOrEmpty(user.Avatar);
-    FileService.DeleteFile(user.Avatar);
+    await _fileService.DeleteFile(user.Avatar);
     using (var ctx = new ChattyBoxContext()) {
       user.Chats = await ctx.Chats.Where(c => c.Users.Any(u => u.Id == user.Id)).ToListAsync();
     }
@@ -484,7 +487,7 @@ public class UserDB {
 
   async public Task<(string, string, List<string>)> ChangeAvatar(IFormFile file, HttpContext context) {
     var user = await GetUser(context);
-    var avatar = await FileService.SaveImage(file, user, isAvatar: true);
+    var avatar = await _fileService.SaveImage(file, user, isAvatar: true);
     user.Avatar = avatar;
     await _userManager.UpdateAsync(user);
     using var ctx = new ChattyBoxContext();
