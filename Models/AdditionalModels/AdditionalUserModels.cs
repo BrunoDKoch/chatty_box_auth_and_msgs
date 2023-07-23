@@ -70,10 +70,10 @@ public class UserDetailedResponse : UserPartialResponse {
 }
 
 public class UserPersonalInfo : UserPartialResponse {
-  public List<FriendRequestFiltered> FriendRequests;
-  public List<FriendResponse> Friends;
-  public List<ChatPreview> Previews;
-  public List<UserPartialResponse> Blocks;
+  public List<FriendRequestFiltered> FriendRequests = new();
+  public List<FriendResponse> Friends = new();
+  public List<ChatPreview> Previews = new();
+  public List<UserPartialResponse> Blocks = new();
   public bool IsAdmin;
   public UserPersonalInfo(User user) : base(user) {
     FriendRequests = user.FriendRequestsReceived.Select(f => new FriendRequestFiltered { UserAdding = new UserPartialResponse(f.UserAdding) }).ToList();

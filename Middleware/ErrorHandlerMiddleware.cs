@@ -64,6 +64,7 @@ public class ErrorHandlerMiddleware : IMiddleware {
 
       context.Response.StatusCode = exception switch {
         CustomException e => (int)e.Status,
+        FileNotFoundException => StatusCodes.Status404NotFound,
         _ => StatusCodes.Status500InternalServerError,
       };
       string message = exception switch {

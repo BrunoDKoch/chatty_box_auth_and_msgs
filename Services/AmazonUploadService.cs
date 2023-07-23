@@ -6,14 +6,14 @@ using Amazon.S3.Transfer;
 
 namespace ChattyBox.Services;
 
-public class AmazonUploadService {
+public class AmazonFileHelperService {
   private readonly string _bucketName;
 
   private readonly BasicAWSCredentials _credentials;
   private readonly RegionEndpoint _region;
   private readonly string _endpoint;
 
-  public AmazonUploadService(IConfiguration configuration) {
+  public AmazonFileHelperService(IConfiguration configuration) {
     var awsConfig = configuration.GetSection("AWS");
     var accessKey = awsConfig.GetValue<string>("AccessKey")!;
     var accessSecret = awsConfig.GetValue<string>("AccessSecret")!;
@@ -44,5 +44,16 @@ public class AmazonUploadService {
       Key = filePath,
     };
     await client.DeleteObjectAsync(deleteObjectRequest);
+  }
+
+  async public Task<GetObjectResponse> DownloadFile(string filePath) {
+    using var client = new AmazonS3Client(_credentials, _region);
+    var downloadRequest = new GetObjectRequest {
+      BucketName = _bucketName,
+      Key = filePath
+    };
+    var transferUtility = new TransferUtility(client);
+    var response = await transferUtility.S3Client.GetObjectAsync(downloadRequest);
+    return response;
   }
 }

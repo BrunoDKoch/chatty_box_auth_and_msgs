@@ -1,8 +1,6 @@
 using ChattyBox.Models;
 using ChattyBox.Models.AdditionalModels;
 using Humanizer;
-using Amazon.S3;
-using Amazon.S3.Transfer;
 namespace ChattyBox.Services;
 
 public enum FileType {
@@ -14,9 +12,9 @@ public enum FileType {
 
 public class FileService {
   private readonly string? _environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-  private readonly AmazonUploadService _amazonUploadService;
-  public FileService(AmazonUploadService amazonUploadService) {
-    _amazonUploadService = amazonUploadService;
+  private readonly AmazonFileHelperService _amazonFileHelperService;
+  public FileService(AmazonFileHelperService amazonFileHelperService) {
+    _amazonFileHelperService = amazonFileHelperService;
   }
   static private string GetFilesDirectory(FileType fileType) {
     string fileDirectory = fileType switch {
@@ -57,7 +55,7 @@ public class FileService {
     var fileName = GetFileName(fileType, file);
     var filePath = GetFilePath(fileName, fileType, chatId, userId);
     if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT")
-      return await _amazonUploadService.UploadFile(file, filePath);
+      return await _amazonFileHelperService.UploadFile(file, filePath);
 
     using var stream = new FileStream(filePath, FileMode.Create);
     await file.CopyToAsync(stream);
@@ -68,7 +66,7 @@ public class FileService {
     var fileName = GetFileName(FileType.Image, file, isAvatar: isAvatar);
     var filePath = GetFilePath(fileName, FileType.Image, user.Id, isAvatar ? "avatar" : "images");
     if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT")
-      return await _amazonUploadService.UploadFile(file, filePath);
+      return await _amazonFileHelperService.UploadFile(file, filePath);
     using var image = await Image.LoadAsync(file.OpenReadStream());
     using var stream = new FileStream(filePath, FileMode.Create);
     await image.SaveAsync(stream, image.Metadata.DecodedImageFormat!);
@@ -80,7 +78,7 @@ public class FileService {
     var filePath = GetFilePath(fileName, FileType.Image, chatId, user.Id);
 
     if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT") {
-      return await _amazonUploadService.UploadFile(file, filePath);
+      return await _amazonFileHelperService.UploadFile(file, filePath);
     } else {
       using var image = await Image.LoadAsync(file.OpenReadStream());
       using var stream = new FileStream(filePath, FileMode.Create);
@@ -126,10 +124,21 @@ public class FileService {
 
   async public Task DeleteFile(string filePath) {
     if (string.IsNullOrEmpty(_environmentName) || _environmentName.ToUpper() != "DEVELOPMENT") {
-      await _amazonUploadService.DeleteFile(filePath);
+      await _amazonFileHelperService.DeleteFile(filePath);
       return;
     }
     if (!File.Exists(filePath)) return;
     File.Delete(filePath);
+  }
+
+  async public Task<string> GetFile(string lang, string fileName) {
+    var filePath = Path.Combine("static", "legal", lang, fileName);
+    var result = await File.ReadAllTextAsync(filePath);
+    return result;
+  }
+
+  async public Task<Amazon.S3.Model.GetObjectResponse> GetFile(string filePath) {
+    var response = await _amazonFileHelperService.DownloadFile(filePath);
+    return response;
   }
 }

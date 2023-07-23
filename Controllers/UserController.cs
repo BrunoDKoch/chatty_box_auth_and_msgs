@@ -71,8 +71,6 @@ public class UserController : ControllerBase {
     return signInResult;
   }
 
-  
-
   // Auth
   [AllowAnonymous]
   [HttpPost("Register")]
@@ -131,13 +129,7 @@ public class UserController : ControllerBase {
 
   [HttpGet]
   async public Task<ActionResult<UserPersonalInfo>> GetUser() {
-    /*ArgumentNullException.ThrowIfNull(HttpContext.User);
-    var id = HttpContext.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
-    ArgumentNullException.ThrowIfNull(id);
-    var cachedUser = await _cachingService.GetCache<UserPersonalInfo>(id.Value);
-    if (cachedUser is not null) return Ok(cachedUser);*/
     UserPersonalInfo user = await _userDB.GetUserPersonalInfo(HttpContext);
-    //await _cachingService.SetCache(user.Id, user);
     return Ok(user);
   }
 
@@ -267,5 +259,13 @@ public class UserController : ControllerBase {
       throw new InvalidOperationException(_localizer.GetString("403"));
     await _fileService.DeleteFile(fileDeletionRequest.FilePath);
     return Ok(fileDeletionRequest.FilePath);
+  }
+
+  [HttpGet("Static/{fileType}/{chatId}/{userId}/{fileName}")]
+  async public Task<ActionResult> GetFile(string fileType, string chatId, string userId, string fileName) {
+    var filePath = $"static/{fileType}/{chatId}/{userId}/{fileName}";
+    var result = await _fileService.GetFile(filePath);
+    if (result.ResponseStream is null) throw new FileNotFoundException();
+    return File(result.ResponseStream, result.Headers.ContentType, fileName);
   }
 }

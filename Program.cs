@@ -171,7 +171,7 @@ builder.Services.AddScoped<MessagesDB>();
 builder.Services.AddScoped<AdminDB>();
 builder.Services.AddTransient<ErrorHandlerMiddleware>();
 builder.Services.AddSingleton<EmailService>();
-builder.Services.AddSingleton<AmazonUploadService>();
+builder.Services.AddSingleton<AmazonFileHelperService>();
 builder.Services.AddSingleton<FileService>();
 
 builder.Services.AddRateLimiter(options => {
@@ -226,14 +226,10 @@ app.UseAuthorization();
 
 app.UseImageSharp();
 
-if (app.Environment.IsDevelopment()) {
-  app.UseStaticFiles(new StaticFileOptions {
+app.UseStaticFiles(new StaticFileOptions {
     FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "static")),
-    RequestPath = "/static"
-  });
-} else {
-  
-}
+    RequestPath = "/static",
+});
 
 app.MapControllers();
 
